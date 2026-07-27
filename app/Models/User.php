@@ -42,4 +42,9 @@ class User extends Authenticatable
             'is_active'         => 'boolean',
         ];
     }
+
+    public function usages()
+    {
+        return $this->hasMany(Usage::class);
+    }
 }

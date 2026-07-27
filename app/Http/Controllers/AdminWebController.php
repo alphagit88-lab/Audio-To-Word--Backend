@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Models\Usage;
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -158,6 +160,48 @@ class AdminWebController extends Controller
         $user->delete();
 
         return redirect()->route('admin.users')->with('success', 'User account deleted successfully.');
+    }
+
+    /**
+     * Usage Logs Admin Page
+     */
+    public function usageIndex(Request $request)
+    {
+        $users      = User::orderBy('name')->get();
+        $filterUser = $request->query('user_id');
+
+        $query = Usage::with('user')->orderBy('created_at', 'desc');
+
+        if ($filterUser) {
+            $query->where('user_id', $filterUser);
+        }
+
+        $usages = $query->paginate(25)->withQueryString();
+
+        return view('admin.usage.index', compact('usages', 'users', 'filterUser'));
+    }
+
+    /**
+     * Settings Page
+     */
+    public function settingsIndex()
+    {
+        $geminiApiKeys = Setting::getValue('gemini_api_keys', '');
+        return view('admin.settings.index', compact('geminiApiKeys'));
+    }
+
+    /**
+     * Update Settings
+     */
+    public function settingsUpdate(Request $request)
+    {
+        $request->validate([
+            'gemini_api_keys' => 'nullable|string',
+        ]);
+
+        Setting::setValue('gemini_api_keys', $request->input('gemini_api_keys', ''));
+
+        return redirect()->route('admin.settings')->with('success', 'Settings updated successfully.');
     }
 
     /**

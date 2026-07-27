@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\UsageController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,9 +22,12 @@ Route::middleware('auth.api_token')->group(function () {
     Route::get('/validate-token', [AuthController::class, 'validateToken']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
-    // Get pool of API keys
+    // Usage logging
+    Route::post('/usage', [UsageController::class, 'store']);
+
+    // Get pool of API keys (from DB settings)
     Route::get('/api-keys', function () {
-        $keysString = env('GEMINI_API_KEYS', '');
+        $keysString = \App\Models\Setting::getValue('gemini_api_keys', '');
         $keys = array_filter(array_map('trim', explode(',', $keysString)));
         return response()->json([
             'keys' => array_values($keys)

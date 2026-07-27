@@ -32,6 +32,13 @@ Route::middleware('admin.web')->prefix('admin')->group(function () {
     Route::put('/users/{id}', [AdminWebController::class, 'userUpdate'])->name('admin.users.update');
     Route::delete('/users/{id}', [AdminWebController::class, 'userDestroy'])->name('admin.users.destroy');
 
+    // Usage Logs
+    Route::get('/usage', [AdminWebController::class, 'usageIndex'])->name('admin.usage');
+
+    // Settings
+    Route::get('/settings', [AdminWebController::class, 'settingsIndex'])->name('admin.settings');
+    Route::put('/settings', [AdminWebController::class, 'settingsUpdate'])->name('admin.settings.update');
+
     // Logout
     Route::post('/logout', [AdminWebController::class, 'logout'])->name('admin.logout');
 });
