@@ -26,6 +26,10 @@ class ApiTokenMiddleware
             return response()->json(['message' => 'Unauthenticated. Invalid or expired token.'], 401);
         }
 
+        if (!$user->is_active) {
+            return response()->json(['message' => 'Your account has been deactivated. Please contact the administrator.'], 403);
+        }
+
         // Bind the authenticated user onto the current request cycle
         auth()->setUser($user);
 
