@@ -24,6 +24,7 @@ Route::middleware('auth.api_token')->group(function () {
 
     // Usage logging
     Route::post('/usage', [UsageController::class, 'store']);
+    Route::get('/usage/summary', [UsageController::class, 'summary']);
 
     // Get pool of API keys (from DB settings)
     Route::get('/api-keys', function () {

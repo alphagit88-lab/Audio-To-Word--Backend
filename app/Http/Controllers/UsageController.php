@@ -36,4 +36,19 @@ class UsageController extends Controller
             ], 500);
         }
     }
+
+    public function summary(Request $request)
+    {
+        $user = $request->user();
+
+        $stats = Usage::where('user_id', $user->id)
+            ->selectRaw('COALESCE(SUM(total_seconds), 0) as total_seconds, COALESCE(SUM(file_count), 0) as total_files, COUNT(*) as total_conversions')
+            ->first();
+
+        return response()->json([
+            'total_seconds'     => (int) $stats->total_seconds,
+            'total_files'       => (int) $stats->total_files,
+            'total_conversions' => (int) $stats->total_conversions,
+        ]);
+    }
 }
