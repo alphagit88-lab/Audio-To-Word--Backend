@@ -35,6 +35,9 @@ Route::middleware('admin.web')->prefix('admin')->group(function () {
     // Usage Logs
     Route::get('/usage', [AdminWebController::class, 'usageIndex'])->name('admin.usage');
 
+    // Error Logs
+    Route::get('/error-logs', [AdminWebController::class, 'errorLogsIndex'])->name('admin.error_logs');
+
     // Settings
     Route::get('/settings', [AdminWebController::class, 'settingsIndex'])->name('admin.settings');
     Route::put('/settings', [AdminWebController::class, 'settingsUpdate'])->name('admin.settings.update');

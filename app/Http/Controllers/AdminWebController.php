@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\Usage;
 use App\Models\Setting;
+use App\Models\ErrorLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -214,5 +215,14 @@ class AdminWebController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('admin.login')->with('success', 'Logged out successfully.');
+    }
+
+    /**
+     * Display Error Logs
+     */
+    public function errorLogsIndex()
+    {
+        $logs = ErrorLog::with('user')->orderBy('created_at', 'desc')->paginate(20);
+        return view('admin.error_logs.index', compact('logs'));
     }
 }
