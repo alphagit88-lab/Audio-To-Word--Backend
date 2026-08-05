@@ -188,7 +188,10 @@ class AdminWebController extends Controller
     public function settingsIndex()
     {
         $geminiApiKeys = Setting::getValue('gemini_api_keys', '');
-        return view('admin.settings.index', compact('geminiApiKeys'));
+        $quickPromptsJson = Setting::getValue('quick_prompts', '[]');
+        $quickPrompts = json_decode($quickPromptsJson, true) ?: [];
+
+        return view('admin.settings.index', compact('geminiApiKeys', 'quickPrompts'));
     }
 
     /**
@@ -198,9 +201,16 @@ class AdminWebController extends Controller
     {
         $request->validate([
             'gemini_api_keys' => 'nullable|string',
+            'quick_prompts'   => 'nullable|array',
+            'quick_prompts.*' => 'nullable|string',
         ]);
 
         Setting::setValue('gemini_api_keys', $request->input('gemini_api_keys', ''));
+        
+        $prompts = array_values(array_filter($request->input('quick_prompts', []), function($val) {
+            return !empty(trim($val));
+        }));
+        Setting::setValue('quick_prompts', json_encode($prompts));
 
         return redirect()->route('admin.settings')->with('success', 'Settings updated successfully.');
     }

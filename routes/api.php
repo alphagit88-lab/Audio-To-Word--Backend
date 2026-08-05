@@ -38,6 +38,15 @@ Route::middleware('auth.api_token')->group(function () {
         ]);
     });
 
+    // Get quick prompts from DB settings
+    Route::get('/quick-prompts', function () {
+        $promptsJson = \App\Models\Setting::getValue('quick_prompts', '[]');
+        $prompts = json_decode($promptsJson, true);
+        return response()->json([
+            'prompts' => is_array($prompts) ? $prompts : []
+        ]);
+    });
+
     // Authenticated user profile
     Route::get('/me', function (Request $request) {
         $user = $request->user();
