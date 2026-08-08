@@ -38,6 +38,12 @@ Route::middleware('admin.web')->prefix('admin')->group(function () {
     // Error Logs
     Route::get('/error-logs', [AdminWebController::class, 'errorLogsIndex'])->name('admin.error_logs');
 
+    // API Keys Management
+    Route::get('/api-keys', [AdminWebController::class, 'apiKeysIndex'])->name('admin.api_keys');
+    Route::post('/api-keys', [AdminWebController::class, 'apiKeyStore'])->name('admin.api_keys.store');
+    Route::put('/api-keys/{id}', [AdminWebController::class, 'apiKeyUpdate'])->name('admin.api_keys.update');
+    Route::delete('/api-keys/{id}', [AdminWebController::class, 'apiKeyDestroy'])->name('admin.api_keys.destroy');
+
     // Settings
     Route::get('/settings', [AdminWebController::class, 'settingsIndex'])->name('admin.settings');
     Route::put('/settings', [AdminWebController::class, 'settingsUpdate'])->name('admin.settings.update');

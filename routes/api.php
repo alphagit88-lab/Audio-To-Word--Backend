@@ -29,12 +29,11 @@ Route::middleware('auth.api_token')->group(function () {
     // Error logging
     Route::post('/error-logs', [\App\Http\Controllers\ErrorLogController::class, 'store']);
 
-    // Get pool of API keys (from DB settings)
+    // Get pool of API keys (from DB api_keys table)
     Route::get('/api-keys', function () {
-        $keysString = \App\Models\Setting::getValue('gemini_api_keys', '');
-        $keys = array_filter(array_map('trim', explode(',', $keysString)));
+        $keys = \App\Models\ApiKey::orderBy('id')->pluck('key')->toArray();
         return response()->json([
-            'keys' => array_values($keys)
+            'keys' => $keys
         ]);
     });
 
@@ -44,6 +43,15 @@ Route::middleware('auth.api_token')->group(function () {
         $prompts = json_decode($promptsJson, true);
         return response()->json([
             'prompts' => is_array($prompts) ? $prompts : []
+        ]);
+    });
+
+    // Get speaker labels from DB settings
+    Route::get('/speaker-labels', function () {
+        $labelsJson = \App\Models\Setting::getValue('speaker_labels', '["Interviewer", "Interviewee", "Doctor", "Patient", "Host", "Guest"]');
+        $labels = json_decode($labelsJson, true);
+        return response()->json([
+            'labels' => is_array($labels) ? $labels : []
         ]);
     });
 

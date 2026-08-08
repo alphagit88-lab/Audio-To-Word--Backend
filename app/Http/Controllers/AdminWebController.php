@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Usage;
 use App\Models\Setting;
 use App\Models\ErrorLog;
+use App\Models\ApiKey;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -30,7 +31,7 @@ class AdminWebController extends Controller
     public function login(Request $request)
     {
         $credentials = $request->validate([
-            'email'    => 'required|email',
+            'email' => 'required|email',
             'password' => 'required|string',
         ]);
 
@@ -59,11 +60,11 @@ class AdminWebController extends Controller
      */
     public function dashboard()
     {
-        $totalUsers    = User::count();
-        $activeUsers   = User::where('is_active', true)->count();
+        $totalUsers = User::count();
+        $activeUsers = User::where('is_active', true)->count();
         $inactiveUsers = User::where('is_active', false)->count();
-        $adminCount    = User::where('role', 'admin')->count();
-        $recentUsers   = User::latest()->take(5)->get();
+        $adminCount = User::where('role', 'admin')->count();
+        $recentUsers = User::latest()->take(5)->get();
 
         return view('admin.dashboard', compact(
             'totalUsers',
@@ -86,7 +87,7 @@ class AdminWebController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
@@ -101,17 +102,17 @@ class AdminWebController extends Controller
     public function userStore(Request $request)
     {
         $validated = $request->validate([
-            'name'      => 'required|string|max:255',
-            'email'     => 'required|email|unique:users,email',
-            'password'  => 'required|string|min:6',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6',
             'is_active' => 'nullable|boolean',
         ]);
 
         User::create([
-            'name'      => $validated['name'],
-            'email'     => $validated['email'],
-            'password'  => Hash::make($validated['password']),
-            'role'      => 'user',
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'role' => 'user',
             'is_active' => $request->has('is_active') ? true : false,
         ]);
 
@@ -126,15 +127,15 @@ class AdminWebController extends Controller
         $user = User::findOrFail($id);
 
         $validated = $request->validate([
-            'name'      => 'required|string|max:255',
-            'email'     => 'required|email|unique:users,email,' . $id,
-            'password'  => 'nullable|string|min:6',
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email,' . $id,
+            'password' => 'nullable|string|min:6',
             'is_active' => 'nullable|boolean',
         ]);
 
         $updateData = [
-            'name'      => $validated['name'],
-            'email'     => $validated['email'],
+            'name' => $validated['name'],
+            'email' => $validated['email'],
             'is_active' => $request->has('is_active') ? true : false,
         ];
 
@@ -168,7 +169,7 @@ class AdminWebController extends Controller
      */
     public function usageIndex(Request $request)
     {
-        $users      = User::orderBy('name')->get();
+        $users = User::orderBy('name')->get();
         $filterUser = $request->query('user_id');
 
         $query = Usage::with('user')->orderBy('created_at', 'desc');
@@ -187,11 +188,13 @@ class AdminWebController extends Controller
      */
     public function settingsIndex()
     {
-        $geminiApiKeys = Setting::getValue('gemini_api_keys', '');
         $quickPromptsJson = Setting::getValue('quick_prompts', '[]');
         $quickPrompts = json_decode($quickPromptsJson, true) ?: [];
+        $speakerLabelsJson = Setting::getValue('speaker_labels', '[]');
+        $speakerLabelsArray = json_decode($speakerLabelsJson, true) ?: [];
+        $speakerLabels = implode(', ', $speakerLabelsArray);
 
-        return view('admin.settings.index', compact('geminiApiKeys', 'quickPrompts'));
+        return view('admin.settings.index', compact('quickPrompts', 'speakerLabels'));
     }
 
     /**
@@ -200,14 +203,16 @@ class AdminWebController extends Controller
     public function settingsUpdate(Request $request)
     {
         $request->validate([
-            'gemini_api_keys' => 'nullable|string',
             'quick_prompts'   => 'nullable|array',
             'quick_prompts.*' => 'nullable|string',
+            'speaker_labels'  => 'nullable|string',
         ]);
 
-        Setting::setValue('gemini_api_keys', $request->input('gemini_api_keys', ''));
-        
-        $prompts = array_values(array_filter($request->input('quick_prompts', []), function($val) {
+        $labelsStr = $request->input('speaker_labels', '');
+        $labelsArr = array_values(array_filter(array_map('trim', explode(',', $labelsStr))));
+        Setting::setValue('speaker_labels', json_encode($labelsArr));
+
+        $prompts = array_values(array_filter($request->input('quick_prompts', []), function ($val) {
             return !empty(trim($val));
         }));
         Setting::setValue('quick_prompts', json_encode($prompts));
@@ -234,5 +239,49 @@ class AdminWebController extends Controller
     {
         $logs = ErrorLog::with('user')->orderBy('created_at', 'desc')->paginate(20);
         return view('admin.error_logs.index', compact('logs'));
+    }
+
+    // ═══════════════════════════════════════════════
+    // API Keys CRUD
+    // ═══════════════════════════════════════════════
+
+    public function apiKeysIndex()
+    {
+        $apiKeys = ApiKey::orderBy('id', 'desc')->get();
+        return view('admin.api_keys.index', compact('apiKeys'));
+    }
+
+    public function apiKeyStore(Request $request)
+    {
+        $validated = $request->validate([
+            'key'           => 'required|string',
+            'subscription'  => 'required|in:Free,Paid',
+            'quota_renewal' => 'required|date',
+        ]);
+
+        ApiKey::create($validated);
+
+        return redirect()->route('admin.api_keys')->with('success', 'API key added successfully.');
+    }
+
+    public function apiKeyUpdate(Request $request, $id)
+    {
+        $apiKey = ApiKey::findOrFail($id);
+
+        $validated = $request->validate([
+            'key'           => 'required|string',
+            'subscription'  => 'required|in:Free,Paid',
+            'quota_renewal' => 'required|date',
+        ]);
+
+        $apiKey->update($validated);
+
+        return redirect()->route('admin.api_keys')->with('success', 'API key updated successfully.');
+    }
+
+    public function apiKeyDestroy($id)
+    {
+        ApiKey::findOrFail($id)->delete();
+        return redirect()->route('admin.api_keys')->with('success', 'API key deleted successfully.');
     }
 }

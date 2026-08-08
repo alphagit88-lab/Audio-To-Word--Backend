@@ -186,39 +186,30 @@
     @csrf
     @method('PUT')
 
-    {{-- Gemini API Keys --}}
+
+    {{-- Speaker Labels --}}
     <div class="settings-card">
         <div class="settings-card-header">
             <div class="settings-card-header-icon">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 2-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             </div>
             <div>
-                <div class="settings-card-title">Gemini AI API Keys</div>
-                <div class="settings-card-desc">Manage the pool of Gemini API keys used for audio transcription</div>
+                <div class="settings-card-title">Speaker Labels</div>
+                <div class="settings-card-desc">Manage the dropdown options for speaker labels in the desktop app.</div>
             </div>
         </div>
         <div class="settings-card-body">
-
-            @php
-                $keysArray = array_filter(array_map('trim', explode(',', $geminiApiKeys ?? '')));
-                $keyCount = count($keysArray);
-            @endphp
-
-            <div class="key-count">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                {{ $keyCount }} key{{ $keyCount !== 1 ? 's' : '' }} configured
-            </div>
-
             <div class="form-group">
-                <label class="form-label" for="gemini_api_keys">API Keys</label>
+                <label class="form-label" for="speaker_labels">Speaker Labels</label>
                 <textarea
                     class="form-textarea"
-                    id="gemini_api_keys"
-                    name="gemini_api_keys"
-                    placeholder="Enter Gemini API keys, separated by commas..."
-                >{{ $geminiApiKeys }}</textarea>
+                    id="speaker_labels"
+                    name="speaker_labels"
+                    placeholder="Enter speaker labels, separated by commas..."
+                    style="min-height: 80px;"
+                >{{ $speakerLabels }}</textarea>
                 <div class="form-hint">
-                    Separate multiple keys with commas. The app will rotate through these keys when one hits a rate limit.
+                    Separate multiple options with commas (e.g., Interviewer, Interviewee, Doctor, Patient).
                 </div>
             </div>
         </div>
