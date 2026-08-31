@@ -9,10 +9,10 @@ use App\Http\Controllers\AdminWebController;
 |--------------------------------------------------------------------------
 */
 
-// Root redirect to Admin Portal
+// Landing Page
 Route::get('/', function () {
-    return redirect()->route('admin.login');
-});
+    return view('landing');
+})->name('home');
 
 // Admin Web Authentication Routes
 Route::get('/admin/login', [AdminWebController::class, 'showLogin'])->name('admin.login');
@@ -50,4 +50,19 @@ Route::middleware('admin.web')->prefix('admin')->group(function () {
 
     // Logout
     Route::post('/logout', [AdminWebController::class, 'logout'])->name('admin.logout');
+
+    // Live Chat Admin Endpoints
+    Route::get('/chat', [\App\Http\Controllers\ChatController::class, 'adminView'])->name('admin.chat');
+    Route::get('/api/chat/sessions', [\App\Http\Controllers\ChatController::class, 'adminFetchSessions'])->name('admin.chat.sessions');
+    Route::get('/api/chat/{session}/messages', [\App\Http\Controllers\ChatController::class, 'adminFetchMessages'])->name('admin.chat.messages');
+    Route::post('/api/chat/{session}/message', [\App\Http\Controllers\ChatController::class, 'adminSendMessage'])->name('admin.chat.send');
+    Route::post('/api/chat/{session}/close', [\App\Http\Controllers\ChatController::class, 'adminCloseSession'])->name('admin.chat.close');
 });
+
+// ── Public Chat Endpoints (AJAX for Landing Page) ──
+Route::prefix('api/chat')->group(function () {
+    Route::post('/start', [\App\Http\Controllers\ChatController::class, 'startSession'])->name('chat.start');
+    Route::get('/{session}/messages', [\App\Http\Controllers\ChatController::class, 'guestFetchMessages'])->name('chat.messages');
+    Route::post('/{session}/message', [\App\Http\Controllers\ChatController::class, 'guestSendMessage'])->name('chat.send');
+});
+

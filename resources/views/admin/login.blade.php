@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login - Audio-to-Word Studio</title>
+    <title>Admin Login - Happy Steno</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -210,7 +210,7 @@
                 </svg>
             </div>
             <h1 class="brand-name">Admin Portal</h1>
-            <p class="brand-desc">Sign in to manage Audio-to-Word app</p>
+            <p class="brand-desc">Sign in to manage Happy Steno app</p>
         </div>
 
         @if(session('error'))
@@ -266,7 +266,7 @@
         </form>
 
         <div class="card-footer">
-            Audio-to-Word Studio • Web Administration
+            Happy Steno • Web Administration
         </div>
     </div>
 
