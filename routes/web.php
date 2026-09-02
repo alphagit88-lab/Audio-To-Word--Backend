@@ -66,3 +66,12 @@ Route::prefix('api/chat')->group(function () {
     Route::post('/{session}/message', [\App\Http\Controllers\ChatController::class, 'guestSendMessage'])->name('chat.send');
 });
 
+// ── Web App (React SPA) ──
+Route::get('/login', function () {
+    return view('app');
+})->name('app.login');
+
+Route::get('/app/{any?}', function () {
+    return view('app');
+})->where('any', '.*')->name('app.main');
+

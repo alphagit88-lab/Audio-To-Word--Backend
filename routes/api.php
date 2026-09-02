@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UsageController;
+use App\Http\Controllers\ConversionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -67,6 +68,18 @@ Route::middleware('auth.api_token')->group(function () {
             ],
         ]);
     });
+
+    // Projects (saved transcription sessions)
+    Route::get('/projects',           [\App\Http\Controllers\ProjectController::class, 'index']);
+    Route::post('/projects',          [\App\Http\Controllers\ProjectController::class, 'store']);
+    Route::get('/projects/{id}',      [\App\Http\Controllers\ProjectController::class, 'show']);
+    Route::put('/projects/{id}',      [\App\Http\Controllers\ProjectController::class, 'update']);
+    Route::delete('/projects/{id}',   [\App\Http\Controllers\ProjectController::class, 'destroy']);
+
+    // Conversion
+    Route::post('/convert/prepare',    [ConversionController::class, 'prepare']);
+    Route::get('/convert/chunk',       [ConversionController::class, 'chunk']);
+    Route::delete('/convert/session',  [ConversionController::class, 'cleanup']);
 
     // ── Admin-only routes ──────────────────────────────────────────────────
     Route::middleware('admin.only')->prefix('admin')->group(function () {

@@ -1,0 +1,1178 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { TranscriptionPart } from '../types';
+import { resubmitWithGemini, saveProjectToApi } from '../services/ConversionService';
+import {
+  X, RotateCcw, CheckCircle, Clock, FileText,
+  Loader2, ChevronRight, Download, AlertCircle,
+  Minimize2, Maximize2, AlertTriangle, ChevronDown, Mic, Square, FolderKanban, Scissors
+} from 'lucide-react';
+import { useTranslation } from '../context/LanguageContext';
+
+interface Props {
+  parts: TranscriptionPart[];
+  totalChunks: number;
+  apiKeys: string[];
+  onClose: () => void;
+  onPartUpdated: (chunkIndex: number, newText: string, newDocxPath?: string) => void;
+  onFinalize: (parts: TranscriptionPart[]) => Promise<void>;
+  isFinalizing: boolean;
+  authToken: string | null;
+  speakerLabels?: string[];
+  currentProjectId?: string | null;
+  currentProjectName?: string | null;
+  onProjectSaved?: (id: string, name: string) => void;
+}
+
+export const TranscriptionReviewPanel: React.FC<Props> = ({
+  parts,
+  totalChunks,
+  apiKeys,
+  onClose,
+  onPartUpdated,
+  onFinalize,
+  isFinalizing,
+  authToken,
+  speakerLabels = [],
+  currentProjectId,
+  currentProjectName,
+  onProjectSaved,
+}) => {
+  const { t } = useTranslation();
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [prompt, setPrompt] = useState('');
+  const [isResubmitting, setIsResubmitting] = useState(false);
+  const [resubmittingLineIdx, setResubmittingLineIdx] = useState<number | null>(null);
+  const [resubmittedSet, setResubmittedSet] = useState<Set<number>>(new Set());
+  const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [isMinimized, setIsMinimized] = useState(false);
+  const [localModel, setLocalModel] = useState('gemini-3.5-flash');
+  const [hoveredLineIdx, setHoveredLineIdx] = useState<number | null>(null);
+  const [isSavingProject, setIsSavingProject] = useState(false);
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [projectNameInput, setProjectNameInput] = useState('');
+  const [isDictatingIdx, setIsDictatingIdx] = useState<number | null>(null);
+  const [selectedTextInfo, setSelectedTextInfo] = useState<{
+    lineIdx: number;
+    lineText: string;
+    allLines: string[];
+    selectedText: string;
+    rect: { top: number; left: number; width: number };
+  } | null>(null);
+  const recognitionRef = useRef<any>(null);
+  const voiceTranscriptRef = useRef<string>('');
+  const textRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const nextTimestampRef = useRef<number | null>(null);
+  const timeUpdateHandlerRef = useRef<(() => void) | null>(null);
+
+  // Callback ref: attaches the timeupdate listener exactly when the audio element mounts
+  const setAudioRef = React.useCallback((el: HTMLAudioElement | null) => {
+    // Detach from previous element
+    if (audioRef.current && timeUpdateHandlerRef.current) {
+      audioRef.current.removeEventListener('timeupdate', timeUpdateHandlerRef.current);
+      timeUpdateHandlerRef.current = null;
+    }
+    (audioRef as React.MutableRefObject<HTMLAudioElement | null>).current = el;
+    if (el) {
+      const handler = () => {
+        if (nextTimestampRef.current !== null && el.currentTime >= nextTimestampRef.current) {
+          el.pause();
+          nextTimestampRef.current = null;
+        }
+      };
+      timeUpdateHandlerRef.current = handler;
+      el.addEventListener('timeupdate', handler);
+    }
+  }, []);
+
+  const selectedPart = parts.find((p) => p.chunkIndex === selectedIndex);
+
+  // Timestamp format: [HH:MM:SS.mmm] or fallback [MM:SS] etc.
+  const TIMESTAMP_REGEX = /([\[\(]\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?[\]\)])/g;
+
+  const parseTimestampToSeconds = (timeStr: string): number => {
+    const clean = timeStr.replace(/[\[\]\(\),]/g, '').trim();
+    // Format: HH:MM:SS.mmm  or  MM:SS.mmm  or  MM:SS
+    const dotIdx = clean.lastIndexOf('.');
+    let msStr = '0';
+    let hmsStr = clean;
+    if (dotIdx !== -1) {
+      msStr = clean.slice(dotIdx + 1);
+      hmsStr = clean.slice(0, dotIdx);
+    }
+    const hmsParts = hmsStr.split(':').map(Number);
+    let seconds = 0;
+    if (hmsParts.length === 3) seconds = hmsParts[0] * 3600 + hmsParts[1] * 60 + hmsParts[2];
+    else if (hmsParts.length === 2) seconds = hmsParts[0] * 60 + hmsParts[1];
+    else seconds = hmsParts[0] || 0;
+    seconds += Number(`0.${msStr}`);
+    return seconds;
+  };
+
+  const handleTimeClick = (timeStr: string, nextTimeStr?: string) => {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = parseTimestampToSeconds(timeStr);
+    nextTimestampRef.current = nextTimeStr ? parseTimestampToSeconds(nextTimeStr) : null;
+    audioRef.current.play().catch(e => console.error('Audio play failed', e));
+  };
+
+  const handlePartialResubmit = async (
+    lineText: string,
+    lineIdx: number,
+    allLines: string[],
+    selectedText?: string
+  ) => {
+    if (!selectedPart || isResubmitting) return;
+    setIsResubmitting(true);
+    setResubmittingLineIdx(lineIdx);
+    setError('');
+    setSuccessMsg('');
+    setSelectedTextInfo(null);
+    try {
+      // Find start time of this line and end time (next timestamp or end of chunk)
+      const tsMatch = lineText.match(TIMESTAMP_REGEX);
+      const startTs = tsMatch ? tsMatch[0] : null;
+      const startSec = startTs ? parseTimestampToSeconds(startTs) : 0;
+
+      // Find end time from next line that has a timestamp
+      let endSec: number | undefined;
+      for (let i = lineIdx + 1; i < allLines.length; i++) {
+        const nextMatch = allLines[i].match(TIMESTAMP_REGEX);
+        if (nextMatch) {
+          endSec = parseTimestampToSeconds(nextMatch[0]);
+          break;
+        }
+      }
+
+      // Build full chunk text with placeholder for this line
+      const fullChunkWithPlaceholder = allLines
+        .map((l, i) => i === lineIdx ? '__PARTIAL_REPLACEMENT__' : l)
+        .join('\n');
+
+      // If a specific text selection is provided, ask AI to fix only that part
+      const resubmitPrompt = selectedText
+        ? `Re-transcribe only the segment from ${startSec.toFixed(3)}s${endSec !== undefined ? ` to ${endSec.toFixed(3)}s` : ''} of the audio. The full line is: "${lineText}". Focus specifically on correcting this portion: "${selectedText}". Start with the exact timestamp ${startTs || '[00:00.000]'}.`
+        : `Re-transcribe only the segment from ${startSec.toFixed(3)}s${endSec !== undefined ? ` to ${endSec.toFixed(3)}s` : ''} of the audio. Start with the exact timestamp ${startTs || '[00:00.000]'}.`;
+
+      const newLineText = await resubmitWithGemini(
+        resubmitPrompt,
+        apiKeys,
+        localModel,
+        fullChunkWithPlaceholder
+      );
+
+      // Splice new line into current text
+      const newLines = [...allLines];
+      newLines[lineIdx] = newLineText.trim();
+      const newText = newLines.join('\n');
+      onPartUpdated(selectedPart.chunkIndex, newText);
+      setResubmittedSet((prev) => new Set([...prev, selectedPart.chunkIndex]));
+      setSuccessMsg(selectedText
+        ? `Selected text in ${startTs || `#${lineIdx + 1}`} corrected.`
+        : `Content at ${startTs || `#${lineIdx + 1}`} updated.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err: any) {
+      setError('Paragraph resubmission failed. Please try again.');
+    } finally {
+      setIsResubmitting(false);
+      setResubmittingLineIdx(null);
+    }
+  };
+
+  const handleDictationClick = (lineText: string, lineIdx: number, allLines: string[], selectedText?: string) => {
+    if (!selectedPart || isResubmitting) return;
+
+    // Stop if already running on this line
+    if (isDictatingIdx === lineIdx) {
+      recognitionRef.current?.stop();
+      setIsDictatingIdx(null);
+      return;
+    }
+
+    if (isDictatingIdx !== null) return; // already editing another line
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError('Your browser does not support voice input. Please use Google Chrome or Edge.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator.language || 'en-US';
+    recognitionRef.current = recognition;
+    voiceTranscriptRef.current = '';
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      let final = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += transcript + ' ';
+        } else {
+          interim += transcript;
+        }
+      }
+      voiceTranscriptRef.current += final;
+      // Live preview: build new line text and push it immediately
+      const liveText = voiceTranscriptRef.current + interim;
+      const newLines = [...allLines];
+      if (selectedText) {
+        newLines[lineIdx] = lineText.replace(selectedText, liveText.trimEnd());
+      } else {
+        // Keep original timestamp if present, replace rest
+        const tsMatch = lineText.match(/(^[\[\(][\d:.,]+[\]\)]\s*)/);
+        const tsPrefix = tsMatch ? tsMatch[1] : '';
+        newLines[lineIdx] = tsPrefix + liveText;
+      }
+      onPartUpdated(selectedPart.chunkIndex, newLines.join('\n'));
+    };
+
+    recognition.onerror = (event: any) => {
+      if (event.error !== 'aborted') {
+        setError(`Voice input error: ${event.error}`);
+      }
+      setIsDictatingIdx(null);
+      recognitionRef.current = null;
+    };
+
+    recognition.onend = () => {
+      setIsDictatingIdx(null);
+      recognitionRef.current = null;
+      if (voiceTranscriptRef.current.trim()) {
+        setSuccessMsg('Voice edit applied.');
+        setTimeout(() => setSuccessMsg(''), 2500);
+        setResubmittedSet((prev) => new Set([...prev, selectedPart.chunkIndex]));
+      }
+    };
+
+    recognition.start();
+    setIsDictatingIdx(lineIdx);
+  };
+
+  const handleInlineReplaceSpeaker = (oldSpk: string, newSpk: string) => {
+    if (!selectedPart || !newSpk || newSpk === oldSpk) return;
+    // Replace ALL occurrences of this speaker in the current part text
+    const escapedOldSpk = oldSpk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^((?:\\[[\\d:.,]+\\]\\s*)?)${escapedOldSpk}:`, 'gm');
+    const newText = selectedPart.text.replace(regex, `$1${newSpk}:`);
+    onPartUpdated(selectedPart.chunkIndex, newText, selectedPart.docxPath);
+  };
+
+  const renderTextWithTimestamps = (text: string) => {
+    const lines = text.split('\n');
+
+    // Build a flat list of timestamps in document order for next-timestamp lookup
+    const allTimestamps: { lineIdx: number; ts: string }[] = [];
+    lines.forEach((line, li) => {
+      const tsMatches = line.match(/[\[\(]\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?[\]\)]/g);
+      if (tsMatches) tsMatches.forEach(ts => allTimestamps.push({ lineIdx: li, ts }));
+    });
+
+    // Collect all unique speaker labels already present in this text (for reset option)
+    const speakerRegexGlobal = /^(?:\[[\d:.,]+\]\s*)?([^:\[\]\n]{2,35}):/gm;
+    const detectedSpeakers = new Set<string>();
+    let gm: RegExpExecArray | null = null;
+    while ((gm = speakerRegexGlobal.exec(text)) !== null) {
+      const s = gm[1].trim();
+      if (s.length >= 2 && s.length < 35 && !s.includes('http') && !s.includes('\\')) {
+        detectedSpeakers.add(s);
+      }
+    }
+
+    return lines.map((line, lineIdx) => {
+      if (!line.trim()) return <div key={lineIdx} style={{ height: '0.8rem' }} />;
+
+      const speakerRegex = /^(?:\[[\d:.,]+\]\s*)?([^:\[\]\n]{2,35}):/;
+      const speakerMatch = line.match(speakerRegex);
+      const speakerText = speakerMatch ? speakerMatch[1].trim() : null;
+
+      const lineParts = line.split(TIMESTAMP_REGEX);
+      const hasTimestamp = TIMESTAMP_REGEX.test(line);
+      TIMESTAMP_REGEX.lastIndex = 0;
+
+      const isHovered = hoveredLineIdx === lineIdx;
+      const isThisLineResubmitting = resubmittingLineIdx === lineIdx;
+      let replacedSpeaker = false;
+
+      // Build merged label options: preset labels first, then a separator, then detected (for reset)
+      const presetOptions = speakerLabels || [];
+      const resetOptions = speakerText ? Array.from(detectedSpeakers).filter(s => s !== speakerText) : [];
+
+      const handleLineMouseUp = () => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) {
+          setSelectedTextInfo(null);
+          return;
+        }
+        const selectedText = selection.toString().trim();
+        if (!selectedText || selectedText.length < 2) {
+          setSelectedTextInfo(null);
+          return;
+        }
+        // Only capture if selected text is within this line's content
+        if (!line.includes(selectedText)) {
+          setSelectedTextInfo(null);
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        setSelectedTextInfo({
+          lineIdx,
+          lineText: line,
+          allLines: lines,
+          selectedText,
+          rect: { top: rect.top, left: rect.left, width: rect.width },
+        });
+      };
+
+      return (
+        <div
+          key={lineIdx}
+          style={{
+            position: 'relative',
+            marginBottom: '0.6rem',
+            padding: '0.25rem 0.4rem',
+            paddingRight: hasTimestamp ? '6rem' : '0.4rem',
+            borderRadius: '6px',
+            background: isHovered ? 'rgba(99,102,241,0.06)' : 'transparent',
+            transition: 'background 0.15s',
+          }}
+          onMouseEnter={() => setHoveredLineIdx(lineIdx)}
+          onMouseLeave={() => setHoveredLineIdx(null)}
+          onMouseUp={handleLineMouseUp}
+        >
+          <span style={{ flex: 1, lineHeight: 1.8 }}>
+            {lineParts.map((part, i) => {
+              if (/^[\[\(]\d{1,2}:\d{2}/.test(part)) {
+                // Find this exact timestamp in the flattened list to get the next one
+                const tsIndex = allTimestamps.findIndex(t => t.lineIdx === lineIdx && t.ts === part);
+                const nextTs = tsIndex >= 0 && tsIndex + 1 < allTimestamps.length ? allTimestamps[tsIndex + 1].ts : undefined;
+
+                return (
+                  <span
+                    key={i}
+                    onClick={() => handleTimeClick(part, nextTs)}
+                    style={{
+                      color: '#818cf8',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      marginRight: '0.35rem',
+                      padding: '0.1rem 0.35rem',
+                      borderRadius: '4px',
+                      background: 'rgba(99,102,241,0.12)',
+                      fontSize: '0.8rem',
+                      fontFamily: 'monospace',
+                      transition: 'background 0.15s',
+                      userSelect: 'none',
+                    }}
+                    title="Click to play this segment (auto-stops at next timestamp)"
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.28)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.12)')}
+                  >
+                    ▶ {part}
+                  </span>
+                );
+              }
+              if (speakerText && !replacedSpeaker && typeof part === 'string' && part.includes(`${speakerText}:`)) {
+                replacedSpeaker = true;
+                const splitIdx = part.indexOf(`${speakerText}:`) + speakerText.length;
+                const before = part.substring(0, splitIdx);
+                const after = part.substring(splitIdx);
+                const hasOptions = presetOptions.length > 0 || resetOptions.length > 0;
+                return (
+                  <span key={i}>
+                    {before}
+                    {hasOptions && (
+                      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: '0.35rem', marginRight: '0.1rem', verticalAlign: 'middle', background: 'rgba(99,102,241,0.15)', borderRadius: '4px', padding: '0.1rem' }}>
+                        <ChevronDown size={14} color="#818cf8" style={{ cursor: 'pointer' }} />
+                        <select
+                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                          value=""
+                          onChange={(e) => handleInlineReplaceSpeaker(speakerText, e.target.value)}
+                          title="Rename this speaker (replaces all occurrences)"
+                        >
+                          <option value="" disabled>Rename all "{speakerText}"...</option>
+                          {presetOptions.length > 0 && (
+                            <optgroup label="Speaker Labels">
+                              {presetOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                            </optgroup>
+                          )}
+                          {resetOptions.length > 0 && (
+                            <optgroup label="Other detected speakers">
+                              {resetOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                            </optgroup>
+                          )}
+                        </select>
+                      </div>
+                    )}
+                    {after}
+                  </span>
+                );
+              }
+              return <span key={i}>{part}</span>;
+            })}
+          </span>
+          {hasTimestamp && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              right: '0.4rem',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              gap: '0.3rem',
+              opacity: 1,
+              pointerEvents: 'auto',
+              zIndex: 10,
+            }}>
+              {/* Paragraph resubmit button */}
+              <button
+                onClick={() => handlePartialResubmit(line, lineIdx, lines)}
+                disabled={isResubmitting || isDictatingIdx !== null}
+                style={{
+                  background: 'rgba(20,22,40,0.92)',
+                  border: `1px solid ${isThisLineResubmitting ? 'rgba(245,158,11,0.6)' : 'rgba(245,158,11,0.35)'}`,
+                  borderRadius: '6px',
+                  color: '#fbbf24',
+                  padding: '0.22rem 0.38rem',
+                  cursor: (isResubmitting || isDictatingIdx !== null) ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxShadow: '0 0 8px 2px rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(4px)',
+                  opacity: (isResubmitting && !isThisLineResubmitting) || isDictatingIdx !== null ? 0.45 : 1,
+                  transition: 'opacity 0.15s, border-color 0.15s',
+                }}
+                title="Resubmit this paragraph to AI"
+              >
+                {isThisLineResubmitting
+                  ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
+                  : <RotateCcw size={13} />}
+              </button>
+
+              {/* Dictation button */}
+              <button
+                onClick={() => handleDictationClick(line, lineIdx, lines)}
+                disabled={isResubmitting}
+                style={{
+                  background: 'rgba(20,22,40,0.92)',
+                  border: `1px solid ${isDictatingIdx === lineIdx ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.35)'}`,
+                  borderRadius: '6px',
+                  color: isDictatingIdx === lineIdx ? '#fca5a5' : '#34d399',
+                  padding: '0.22rem 0.38rem',
+                  cursor: isResubmitting ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  boxShadow: '0 0 8px 2px rgba(0,0,0,0.5)',
+                  backdropFilter: 'blur(4px)',
+                  opacity: isResubmitting ? 0.45 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+                title={isDictatingIdx === lineIdx ? 'Stop voice edit' : 'Edit with voice'}
+              >
+                {isDictatingIdx === lineIdx ? <Square size={13} /> : <Mic size={13} />}
+              </button>
+
+              {/* Cancel voice edit button */}
+              {isDictatingIdx === lineIdx && (
+                <button
+                  onClick={() => {
+                    recognitionRef.current?.abort();
+                    setIsDictatingIdx(null);
+                    recognitionRef.current = null;
+                  }}
+                  style={{
+                    background: 'rgba(20,22,40,0.92)',
+                    border: '1px solid rgba(239,68,68,0.35)',
+                    borderRadius: '6px',
+                    color: '#fca5a5',
+                    padding: '0.22rem 0.38rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    boxShadow: '0 0 8px 2px rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(4px)',
+                  }}
+                  title="Cancel voice edit"
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    });
+  };
+
+
+  // Scroll text area to top when part changes
+  useEffect(() => {
+    if (textRef.current) textRef.current.scrollTop = 0;
+  }, [selectedIndex]);
+
+  // Auto-select newest received part
+  useEffect(() => {
+    if (parts.length > 0 && !parts.find((p) => p.chunkIndex === selectedIndex)) {
+      setSelectedIndex(parts[parts.length - 1].chunkIndex);
+    }
+  }, [parts]);
+
+  const handleResubmit = async () => {
+    if (!selectedPart || !prompt.trim() || isResubmitting) return;
+    setIsResubmitting(true);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const newText = await resubmitWithGemini(
+        prompt.trim(),
+        apiKeys,
+        localModel
+      );
+      onPartUpdated(selectedPart.chunkIndex, newText);
+      setResubmittedSet((prev) => new Set([...prev, selectedPart.chunkIndex]));
+      setPrompt('');
+      setSuccessMsg(`Part ${selectedPart.chunkIndex + 1} updated successfully.`);
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err: any) {
+      setError('Resubmission failed. Please try again.');
+    } finally {
+      setIsResubmitting(false);
+    }
+  };
+
+  const allDone = parts.length === totalChunks;
+
+  const s = {
+    overlay: {
+      position: 'fixed' as const,
+      inset: 0,
+      zIndex: 9999,
+      background: 'rgba(7, 10, 20, 0.88)',
+      backdropFilter: 'blur(6px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    panel: {
+      width: 'calc(100vw - 60px)',
+      height: 'calc(100vh - 60px)',
+      maxWidth: '1200px',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      background: 'linear-gradient(145deg, #0f172a 0%, #1a2235 100%)',
+      border: '1px solid rgba(99,102,241,0.25)',
+      borderRadius: '18px',
+      boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)',
+      overflow: 'hidden',
+    },
+    header: {
+      padding: '1rem 1.5rem',
+      borderBottom: '1px solid rgba(255,255,255,0.06)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      background: 'rgba(15,23,42,0.6)',
+      flexShrink: 0 as const,
+    },
+    body: {
+      flex: 1,
+      display: 'flex',
+      overflow: 'hidden',
+    },
+    sidebar: {
+      width: '220px',
+      borderRight: '1px solid rgba(255,255,255,0.06)',
+      overflowY: 'auto' as const,
+      background: 'rgba(10,16,30,0.5)',
+      flexShrink: 0 as const,
+      padding: '0.75rem 0.5rem',
+      display: 'flex',
+      flexDirection: 'column' as const,
+      gap: '0.25rem',
+    },
+    partBtn: (isActive: boolean, isDone: boolean, isResubmitted: boolean) => ({
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.6rem',
+      padding: '0.65rem 0.75rem',
+      borderRadius: '8px',
+      border: isActive ? (isResubmitted ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(99,102,241,0.4)') : '1px solid transparent',
+      background: isActive
+        ? (isResubmitted 
+            ? 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)'
+            : 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 100%)')
+        : 'none',
+      color: isActive ? (isResubmitted ? '#fbbf24' : '#e2e8f0') : isDone ? (isResubmitted ? '#fcd34d' : '#94a3b8') : '#475569',
+      fontSize: '0.82rem',
+      fontWeight: isActive ? 600 : 500,
+      cursor: isDone ? 'pointer' : 'default',
+      transition: 'all 0.15s',
+      width: '100%',
+      textAlign: 'left' as const,
+    }),
+    content: {
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column' as const,
+      overflow: 'hidden',
+    },
+    textArea: {
+      flex: 1,
+      overflowY: 'auto' as const,
+      padding: '1.5rem',
+      lineHeight: 1.8,
+      fontSize: '0.9rem',
+      color: '#cbd5e1',
+      whiteSpace: 'pre-wrap' as const,
+    },
+    bottomBar: {
+      borderTop: '1px solid rgba(255,255,255,0.06)',
+      padding: '1rem 1.5rem',
+      background: 'rgba(10,16,30,0.5)',
+      flexShrink: 0 as const,
+    },
+    promptInput: {
+      width: '100%',
+      background: 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.1)',
+      borderRadius: '8px',
+      color: '#f1f5f9',
+      padding: '0.7rem 1rem',
+      fontSize: '0.85rem',
+      resize: 'vertical' as const,
+      minHeight: '64px',
+      outline: 'none',
+      fontFamily: 'inherit',
+      marginBottom: '0.75rem',
+      boxSizing: 'border-box' as const,
+    },
+    row: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '0.75rem',
+      justifyContent: 'space-between',
+      flexWrap: 'wrap' as const,
+    },
+  };
+
+  const getPartStatus = (idx: number) => {
+    const done = parts.find((p) => p.chunkIndex === idx);
+    if (!done) return 'pending';
+    if (resubmittedSet.has(idx)) return 'resubmitted';
+    return 'done';
+  };
+
+  const StatusIcon = ({ idx }: { idx: number }) => {
+    const st = getPartStatus(idx);
+    if (st === 'pending') return <Clock size={13} color="#475569" />;
+
+    const part = parts.find((p) => p.chunkIndex === idx);
+    if (part && part.text.includes('**Process aborted for this part due to recitation or safety reasons**')) {
+      return <span title="Safety block detected"><AlertTriangle size={13} color="#ef4444" /></span>;
+    }
+
+    if (st === 'resubmitted') return <RotateCcw size={13} color="#f59e0b" />;
+    return <CheckCircle size={13} color="#10b981" />;
+  };
+
+  if (isMinimized) {
+    return (
+      <div
+        style={{
+          position: 'fixed' as const, bottom: '24px', right: '24px', zIndex: 9999,
+          background: 'linear-gradient(135deg, #1e293b, #0f172a)',
+          border: '1px solid rgba(99,102,241,0.4)', borderRadius: '12px',
+          padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '16px',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+          cursor: 'pointer', transition: 'all 0.2s',
+        }}
+        onClick={() => setIsMinimized(false)}
+        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 15px 30px -5px rgba(0, 0, 0, 0.6)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.5)'; }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ background: 'rgba(99,102,241,0.15)', padding: '8px', borderRadius: '8px', border: '1px solid rgba(99,102,241,0.25)' }}>
+            <FileText size={20} color="#818cf8" />
+          </div>
+          <div>
+            <div style={{ color: '#f8fafc', fontWeight: 600, fontSize: '0.9rem' }}>Review Transcription</div>
+            <div style={{ color: '#94a3b8', fontSize: '0.75rem', marginTop: '2px', display: 'flex', alignItems: 'center' }}>
+              {parts.length} of {totalChunks} parts transcribed
+              {!allDone && (
+                <span style={{ marginLeft: '6px', color: '#6366f1', display: 'flex', alignItems: 'center' }}>
+                  <Loader2 size={10} style={{ animation: 'spin 1s linear infinite' }} />
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsMinimized(false); }}
+          style={{
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '6px', padding: '6px', color: '#e2e8f0', cursor: 'pointer',
+            display: 'flex', transition: 'background 0.2s'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
+        >
+          <Maximize2 size={16} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.overlay}>
+      <div style={s.panel}>
+        {/* Header */}
+        <div style={s.header}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: '8px',
+              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <FileText size={16} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontSize: '1rem', fontWeight: 700, color: '#f8fafc' }}>
+                Transcription Review
+              </div>
+              <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
+                {parts.length} of {totalChunks} parts transcribed
+                {!allDone && (
+                  <span style={{ marginLeft: '0.5rem', color: '#6366f1' }}>
+                    <Loader2 size={11} style={{ display: 'inline', animation: 'spin 1s linear infinite' }} /> transcribing…
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+            <button onClick={() => setIsMinimized(true)} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#64748b', padding: '0.4rem', borderRadius: '6px',
+              display: 'flex', alignItems: 'center', transition: 'all 0.15s'
+            }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#e2e8f0'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = 'none'; }}
+              title="Minimize panel"
+            >
+              <Minimize2 size={18} />
+            </button>
+            <button onClick={onClose} style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#64748b', padding: '0.4rem', borderRadius: '6px',
+              display: 'flex', alignItems: 'center', transition: 'all 0.15s'
+            }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.background = 'none'; }}
+              title="Close panel"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={s.body}>
+          {/* Sidebar */}
+          <div style={s.sidebar}>
+            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 0.25rem 0.5rem' }}>
+              Parts
+            </div>
+            {Array.from({ length: totalChunks }, (_, i) => {
+              const isDone = !!parts.find((p) => p.chunkIndex === i);
+              const isActive = selectedIndex === i;
+              const isResubmitted = resubmittedSet.has(i);
+              return (
+                <button
+                  key={i}
+                  style={s.partBtn(isActive, isDone, isResubmitted)}
+                  onClick={() => isDone && setSelectedIndex(i)}
+                >
+                  <StatusIcon idx={i} />
+                  <span>Part {i + 1}</span>
+                  {isActive && <ChevronRight size={12} style={{ marginLeft: 'auto', opacity: 0.6 }} />}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Main content */}
+          <div style={s.content}>
+            {/* Part header */}
+            <div style={{
+              padding: '0.75rem 1.5rem',
+              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              display: 'flex', alignItems: 'center', gap: '0.75rem',
+              background: 'rgba(15,23,42,0.3)', flexShrink: 0
+            }}>
+              <span style={{ fontWeight: 600, color: '#a5b4fc', fontSize: '0.9rem' }}>
+                Part {selectedIndex + 1}
+              </span>
+              {resubmittedSet.has(selectedIndex) && (
+                <span style={{
+                  background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+                  color: '#fbbf24', fontSize: '0.7rem', fontWeight: 600,
+                  padding: '0.15rem 0.5rem', borderRadius: '20px'
+                }}>
+                  Resubmitted
+                </span>
+              )}
+              {/* Part docx download not available in web version */}
+            </div>
+
+            {/* Audio Player */}
+            {selectedPart?.audioChunkPaths?.[0] && (
+              <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(10,16,30,0.5)', flexShrink: 0 }}>
+                <audio
+                  ref={setAudioRef}
+                  controls
+                  src={`file:///${selectedPart.audioChunkPaths[0].replace(/\\/g, '/')}`}
+                  style={{ width: '100%', height: '36px', outline: 'none' }}
+                />
+              </div>
+            )}
+
+            {/* Scrollable text */}
+            <div
+              ref={textRef}
+              className="selectable-text"
+              style={s.textArea}
+              onMouseDown={() => setSelectedTextInfo(null)}
+            >
+              {selectedPart ? (
+                renderTextWithTimestamps(selectedPart.text)
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', color: '#475569', marginTop: '2rem' }}>
+                  <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                  Transcribing this part…
+                </div>
+              )}
+            </div>
+
+            {/* Floating selection resubmit popup */}
+            {selectedTextInfo && (
+              <div
+                style={{
+                  position: 'fixed',
+                  top: selectedTextInfo.rect.top - 44,
+                  left: selectedTextInfo.rect.left + selectedTextInfo.rect.width / 2,
+                  transform: 'translateX(-50%)',
+                  zIndex: 99999,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  background: 'rgba(15,22,40,0.97)',
+                  border: '1px solid rgba(245,158,11,0.4)',
+                  borderRadius: '8px',
+                  padding: '0.3rem 0.55rem',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.6)',
+                  backdropFilter: 'blur(8px)',
+                  pointerEvents: 'auto',
+                }}
+              >
+                <Scissors size={11} color="#fbbf24" />
+                <span style={{ fontSize: '0.72rem', color: '#fbbf24', fontWeight: 600, maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  "{selectedTextInfo.selectedText}"
+                </span>
+                <button
+                  onClick={() => handleDictationClick(
+                    selectedTextInfo.lineText,
+                    selectedTextInfo.lineIdx,
+                    selectedTextInfo.allLines,
+                    selectedTextInfo.selectedText
+                  )}
+                  disabled={isResubmitting || (isDictatingIdx !== null && isDictatingIdx !== selectedTextInfo.lineIdx)}
+                  style={{
+                    background: isDictatingIdx === selectedTextInfo.lineIdx ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.15)',
+                    border: `1px solid ${isDictatingIdx === selectedTextInfo.lineIdx ? 'rgba(239,68,68,0.5)' : 'rgba(16,185,129,0.4)'}`,
+                    borderRadius: '5px',
+                    color: isDictatingIdx === selectedTextInfo.lineIdx ? '#fca5a5' : '#34d399',
+                    padding: '0.2rem',
+                    cursor: isResubmitting || (isDictatingIdx !== null && isDictatingIdx !== selectedTextInfo.lineIdx) ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title={isDictatingIdx === selectedTextInfo.lineIdx ? "Stop voice edit" : "Edit with voice"}
+                >
+                  {isDictatingIdx === selectedTextInfo.lineIdx ? <Square size={11} /> : <Mic size={11} />}
+                </button>
+                <button
+                  onClick={() => setSelectedTextInfo(null)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    padding: '0.1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  title="Dismiss"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            )}
+
+            {/* Bottom bar */}
+            <div style={s.bottomBar}>
+              {error && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                  borderRadius: '6px', padding: '0.5rem 0.75rem',
+                  color: '#fca5a5', fontSize: '0.8rem', marginBottom: '0.75rem'
+                }}>
+                  <AlertCircle size={14} /> {error}
+                </div>
+              )}
+              {successMsg && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)',
+                  borderRadius: '6px', padding: '0.5rem 0.75rem',
+                  color: '#6ee7b7', fontSize: '0.8rem', marginBottom: '0.75rem'
+                }}>
+                  <CheckCircle size={14} /> {successMsg}
+                </div>
+              )}
+              <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                <textarea
+                  style={{ ...s.promptInput, marginBottom: 0, paddingBottom: '2.8rem' }}
+                  placeholder={`Correction prompt for Part ${selectedIndex + 1}… e.g. "Format as a dialog between two speakers"`}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={!selectedPart || isResubmitting}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleResubmit(); }}
+                />
+                {/* Model selector — hidden for now; always uses gemini-3.5-flash */}
+                <div style={{ display: 'none' }}>
+                  <select
+                    value={localModel}
+                    onChange={(e) => setLocalModel(e.target.value)}
+                    disabled={isResubmitting}
+                  >
+                    <option value="gemini-3.5-flash">{t('options.transcribe_model_2')}</option>
+                    <option value="gemini-3.5-flash-lite">{t('options.transcribe_model_1')}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={s.row}>
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleResubmit}
+                    disabled={!selectedPart || !prompt.trim() || isResubmitting}
+                    style={{
+                      background: !selectedPart || !prompt.trim() || isResubmitting
+                        ? 'rgba(99,102,241,0.2)'
+                        : 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                      border: 'none', borderRadius: '8px', color: '#fff',
+                      padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 600,
+                      cursor: !selectedPart || !prompt.trim() || isResubmitting ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      opacity: !selectedPart || !prompt.trim() ? 0.5 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    {/* Only show spinner here for full-part resubmits (resubmittingLineIdx === null means it's the bottom bar resubmit) */}
+                    {isResubmitting && resubmittingLineIdx === null
+                      ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Resubmitting…</>
+                      : <><RotateCcw size={14} /> Resubmit Part {selectedIndex + 1}</>
+                    }
+                  </button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '0.73rem', color: '#475569' }}>
+                    {allDone ? 'All parts transcribed' : `Waiting for ${totalChunks - parts.length} more parts…`}
+                  </span>
+                  <button
+                    onClick={() => {
+                      if (currentProjectId && currentProjectName) {
+                        (async () => {
+                          setIsSavingProject(true);
+                          setError('');
+                          try {
+                            await saveProjectToApi(currentProjectName, parts, totalChunks, authToken, currentProjectId);
+                            setSuccessMsg(`Project saved.`);
+                            setTimeout(() => setSuccessMsg(''), 4000);
+                          } catch {
+                            setError('Failed to save project. Please try again.');
+                          } finally {
+                            setIsSavingProject(false);
+                          }
+                        })();
+                      } else {
+                        setProjectNameInput('');
+                        setShowSaveModal(true);
+                      }
+                    }}
+                    disabled={parts.length === 0 || isFinalizing || isSavingProject}
+                    style={{
+                      background: parts.length === 0 || isFinalizing || isSavingProject
+                        ? 'rgba(99,102,241,0.1)'
+                        : 'linear-gradient(135deg,#6366f1,#4f46e5)',
+                      border: '1px solid rgba(99,102,241,0.35)',
+                      borderRadius: '8px', color: '#fff',
+                      padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 600,
+                      cursor: parts.length === 0 || isFinalizing || isSavingProject ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      opacity: parts.length === 0 ? 0.4 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    {isSavingProject
+                      ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving Project…</>
+                      : <><FolderKanban size={14} /> Save Project</>
+                    }
+                  </button>
+                  <button
+                    onClick={() => onFinalize(parts)}
+                    disabled={parts.length === 0 || isFinalizing || isSavingProject}
+                    style={{
+                      background: parts.length === 0 || isFinalizing
+                        ? 'rgba(16,185,129,0.15)'
+                        : 'linear-gradient(135deg,#10b981,#059669)',
+                      border: '1px solid rgba(16,185,129,0.3)',
+                      borderRadius: '8px', color: '#fff',
+                      padding: '0.6rem 1.25rem', fontSize: '0.85rem', fontWeight: 600,
+                      cursor: parts.length === 0 || isFinalizing || isSavingProject ? 'not-allowed' : 'pointer',
+                      display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      opacity: parts.length === 0 ? 0.4 : 1,
+                      transition: 'opacity 0.15s',
+                    }}
+                  >
+                    {isFinalizing
+                      ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Saving…</>
+                      : <><Download size={14} /> Finalize All Parts & Save Doc</>
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Save Project Modal */}
+      {showSaveModal && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 99999,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg,#1e293b,#0f172a)',
+            border: '1px solid rgba(99,102,241,0.3)',
+            borderRadius: '14px',
+            padding: '2rem',
+            width: '100%',
+            maxWidth: '420px',
+            boxShadow: '0 25px 50px rgba(0,0,0,0.6)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+              <FolderKanban size={20} color="#818cf8" />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0' }}>Save Project</h3>
+            </div>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1rem', lineHeight: 1.5 }}>
+              Enter a name for this project. Audio files and transcription data will be saved permanently.
+            </p>
+            <input
+              type="text"
+              autoFocus
+              placeholder="e.g. Interview – 2026-08-13"
+              value={projectNameInput}
+              onChange={(e) => setProjectNameInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && projectNameInput.trim()) {
+                  (async () => {
+                    setShowSaveModal(false);
+                    setIsSavingProject(true);
+                    setError('');
+                    try {
+                      const saved = await saveProjectToApi(projectNameInput.trim(), parts, totalChunks, authToken);
+                      if (onProjectSaved) onProjectSaved(saved.id, saved.name);
+                      setSuccessMsg(`Project "${projectNameInput.trim()}" saved.`);
+                      setTimeout(() => setSuccessMsg(''), 4000);
+                    } catch {
+                      setError('Failed to save project. Please try again.');
+                    } finally {
+                      setIsSavingProject(false);
+                    }
+                  })();
+                }
+                if (e.key === 'Escape') setShowSaveModal(false);
+              }}
+              style={{
+                width: '100%',
+                boxSizing: 'border-box',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(99,102,241,0.35)',
+                borderRadius: '8px',
+                color: '#e2e8f0',
+                padding: '0.65rem 0.9rem',
+                fontSize: '0.9rem',
+                outline: 'none',
+                marginBottom: '1.25rem',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowSaveModal(false)}
+                style={{ background: 'none', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '7px', color: '#94a3b8', padding: '0.5rem 1.1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!projectNameInput.trim()}
+                onClick={async () => {
+                  if (!projectNameInput.trim()) return;
+                  setShowSaveModal(false);
+                  setIsSavingProject(true);
+                  setError('');
+                  try {
+                    const saved = await saveProjectToApi(projectNameInput.trim(), parts, totalChunks, authToken);
+                    if (onProjectSaved) onProjectSaved(saved.id, saved.name);
+                    setSuccessMsg(`Project "${projectNameInput.trim()}" saved.`);
+                    setTimeout(() => setSuccessMsg(''), 4000);
+                  } catch {
+                    setError('Failed to save project. Please try again.');
+                  } finally {
+                    setIsSavingProject(false);
+                  }
+                }}
+                style={{
+                  background: projectNameInput.trim() ? 'linear-gradient(135deg,#6366f1,#4f46e5)' : 'rgba(99,102,241,0.2)',
+                  border: '1px solid rgba(99,102,241,0.4)',
+                  borderRadius: '7px',
+                  color: '#fff',
+                  padding: '0.5rem 1.4rem',
+                  cursor: projectNameInput.trim() ? 'pointer' : 'not-allowed',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: '0.4rem',
+                }}
+              >
+                <FolderKanban size={13} /> Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+};
+

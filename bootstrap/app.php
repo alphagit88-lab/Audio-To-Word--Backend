@@ -12,6 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(append: [
+            \App\Http\Middleware\CrossOriginIsolation::class,
+        ]);
         $middleware->alias([
             'auth.api_token' => \App\Http\Middleware\ApiTokenMiddleware::class,
             'admin.only'     => \App\Http\Middleware\AdminMiddleware::class,
