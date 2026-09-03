@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\UsageController;
 use App\Http\Controllers\ConversionController;
+use App\Http\Controllers\RegisterController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,6 +16,8 @@ use App\Http\Controllers\ConversionController;
 
 // ── Public routes (no authentication required) ────────────────────────────
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [RegisterController::class, 'register']);
+Route::post('/register/upload', [RegisterController::class, 'register']); // alias with file
 
 // ── Authenticated routes ───────────────────────────────────────────────────
 Route::middleware('auth.api_token')->group(function () {
@@ -88,5 +91,10 @@ Route::middleware('auth.api_token')->group(function () {
         Route::get('/users/{id}',    [UserController::class, 'show']);
         Route::put('/users/{id}',    [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
+
+        // Pending registrations
+        Route::get('/pending-users',              [RegisterController::class, 'pendingUsers']);
+        Route::post('/pending-users/{id}/approve',[RegisterController::class, 'approve']);
+        Route::post('/pending-users/{id}/reject', [RegisterController::class, 'reject']);
     });
 });

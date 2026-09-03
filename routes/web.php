@@ -26,11 +26,16 @@ Route::middleware('admin.web')->prefix('admin')->group(function () {
 
     Route::get('/dashboard', [AdminWebController::class, 'dashboard'])->name('admin.dashboard');
 
-    // User Management CRUD
+    // User Management CRUD (Active Users)
     Route::get('/users', [AdminWebController::class, 'usersIndex'])->name('admin.users');
     Route::post('/users', [AdminWebController::class, 'userStore'])->name('admin.users.store');
     Route::put('/users/{id}', [AdminWebController::class, 'userUpdate'])->name('admin.users.update');
     Route::delete('/users/{id}', [AdminWebController::class, 'userDestroy'])->name('admin.users.destroy');
+
+    // Pending Users Approval
+    Route::get('/pending-users', [AdminWebController::class, 'pendingUsersIndex'])->name('admin.pending_users');
+    Route::post('/pending-users/{id}/approve', [AdminWebController::class, 'pendingUserApprove'])->name('admin.pending_users.approve');
+    Route::post('/pending-users/{id}/reject', [AdminWebController::class, 'pendingUserReject'])->name('admin.pending_users.reject');
 
     // Usage Logs
     Route::get('/usage', [AdminWebController::class, 'usageIndex'])->name('admin.usage');
@@ -70,6 +75,10 @@ Route::prefix('api/chat')->group(function () {
 Route::get('/login', function () {
     return view('app');
 })->name('app.login');
+
+Route::get('/register', function () {
+    return view('app');
+})->name('app.register');
 
 Route::get('/app/{any?}', function () {
     return view('app');

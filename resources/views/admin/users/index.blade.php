@@ -1,7 +1,7 @@
 @extends('layouts.admin')
 
-@section('title', 'User Management')
-@section('page_title', 'User Management')
+@section('title', 'Active Users')
+@section('page_title', 'Active Users')
 
 @section('styles')
     <style>
@@ -254,7 +254,7 @@
                 <tbody>
                     @forelse($users as $u)
                         <tr>
-                            <td style="font-weight: 500;">{{ $u->name }}</td>
+                            <td style="font-weight: 500;">{{ $u->first_name }} {{ $u->last_name }}</td>
                             <td style="font-family: monospace; color: #cbd5e1;">{{ $u->email }}</td>
                             <td>
                                 @if($u->role === 'admin')
@@ -276,7 +276,7 @@
                             <td style="text-align: right;">
                                 <div style="display: inline-flex; gap: 0.4rem;">
                                     <button class="action-btn action-btn-edit" title="Edit User"
-                                        onclick="openEditModal({{ $u->id }}, '{{ addslashes($u->name) }}', '{{ addslashes($u->email) }}', {{ $u->is_active ? 'true' : 'false' }})">
+                                        onclick="openEditModal({{ $u->id }}, '{{ addslashes($u->first_name) }}', '{{ addslashes($u->last_name) }}', '{{ addslashes($u->email) }}', {{ $u->is_active ? 'true' : 'false' }})">
                                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                             stroke-width="2">
                                             <path d="M12 20h9" />
@@ -287,7 +287,7 @@
                                     @if($u->id !== Auth::id())
                                         <form action="{{ route('admin.users.destroy', $u->id) }}" method="POST"
                                             style="display: inline;"
-                                            onsubmit="return confirm('Are you sure you want to delete user {{ addslashes($u->name) }}?');">
+                                            onsubmit="return confirm('Are you sure you want to delete user {{ addslashes($u->first_name) }} {{ addslashes($u->last_name) }}?');">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="action-btn action-btn-delete" title="Delete User">
@@ -336,7 +336,10 @@
                 @csrf
                 <div class="form-group">
                     <label class="form-label">Full Name</label>
-                    <input type="text" name="name" class="form-control" required placeholder="e.g. Nimal Perera">
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" name="first_name" class="form-control" required placeholder="First Name">
+                        <input type="text" name="last_name" class="form-control" required placeholder="Last Name">
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -380,7 +383,10 @@
                 @method('PUT')
                 <div class="form-group">
                     <label class="form-label">Full Name</label>
-                    <input type="text" id="edit_name" name="name" class="form-control" required>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="edit_first_name" name="first_name" class="form-control" required placeholder="First Name">
+                        <input type="text" id="edit_last_name" name="last_name" class="form-control" required placeholder="Last Name">
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -421,10 +427,11 @@
             document.getElementById('createModal').classList.remove('active');
         }
 
-        function openEditModal(id, name, email, isActive) {
+        function openEditModal(id, firstName, lastName, email, isActive) {
             const form = document.getElementById('editForm');
             form.action = `{{ url('') }}/admin/users/${id}`;
-            document.getElementById('edit_name').value = name;
+            document.getElementById('edit_first_name').value = firstName;
+            document.getElementById('edit_last_name').value = lastName;
             document.getElementById('edit_email').value = email;
             document.getElementById('edit_is_active').checked = isActive;
             document.getElementById('editModal').classList.add('active');

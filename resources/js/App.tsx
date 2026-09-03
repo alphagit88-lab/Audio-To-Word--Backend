@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { AudioPicker } from './components/AudioPicker';
 import { ConversionStatusCard } from './components/ConversionStatusCard';
 import { Login } from './components/Login';
+import { Register } from './components/Register';
 import { UserManagement } from './components/UserManagement';
 import { TranscriptionReviewPanel } from './components/TranscriptionReviewPanel';
 import { ProjectsPage } from './components/ProjectsPage';
@@ -21,7 +22,8 @@ interface UsageStats {
 
 interface AuthUser {
   id: number;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   role: 'admin' | 'user';
 }
@@ -33,6 +35,9 @@ const MainAppContent: React.FC = () => {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [authPage, setAuthPage] = useState<'login' | 'register'>(
+    window.location.pathname === '/register' ? 'register' : 'login'
+  );
 
   // API Key Pool states
   const [apiKeys, setApiKeys] = useState<string[]>([]);
@@ -454,10 +459,27 @@ const MainAppContent: React.FC = () => {
 
   // Not Logged In
   if (!token || !user) {
+    if (authPage === 'register') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflowY: 'auto' }}>
+          <Header />
+          <Register onGoToLogin={() => {
+            window.history.pushState({}, '', '/login');
+            setAuthPage('login');
+          }} />
+        </div>
+      );
+    }
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw', overflowY: 'auto' }}>
         <Header />
-        <Login onLoginSuccess={handleLoginSuccess} />
+        <Login
+          onLoginSuccess={handleLoginSuccess}
+          onGoToRegister={() => {
+            window.history.pushState({}, '', '/register');
+            setAuthPage('register');
+          }}
+        />
       </div>
     );
   }

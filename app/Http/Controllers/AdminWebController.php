@@ -82,12 +82,13 @@ class AdminWebController extends Controller
     {
         $search = $request->query('search');
 
-        $query = User::query();
+        $query = User::where('status', 'approved');
 
         if ($search) {
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
@@ -149,6 +150,54 @@ class AdminWebController extends Controller
     }
 
     /**
+     * Pending Users list
+     */
+    public function pendingUsersIndex(Request $request)
+    {
+        $search = $request->query('search');
+
+        $query = User::where('status', 'pending');
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
+
+        return view('admin.pending_users.index', compact('users', 'search'));
+    }
+
+    /**
+     * Approve Pending User
+     */
+    public function pendingUserApprove($id)
+    {
+        $user = User::findOrFail($id);
+        $user->update([
+            'status' => 'approved',
+            'is_active' => true,
+        ]);
+        return redirect()->back()->with('success', 'User approved successfully.');
+    }
+
+    /**
+     * Reject Pending User
+     */
+    public function pendingUserReject($id)
+    {
+        $user = User::findOrFail($id);
+        $user->update([
+            'status' => 'rejected',
+            'is_active' => false,
+        ]);
+        return redirect()->back()->with('success', 'User rejected.');
+    }
+
+    /**
      * Delete User Account
      */
     public function userDestroy($id)
@@ -169,7 +218,7 @@ class AdminWebController extends Controller
      */
     public function usageIndex(Request $request)
     {
-        $users = User::orderBy('name')->get();
+        $users = User::orderBy('first_name')->get();
         $filterUser = $request->query('user_id');
 
         $query = Usage::with('user')->orderBy('created_at', 'desc');

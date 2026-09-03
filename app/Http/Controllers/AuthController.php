@@ -29,6 +29,14 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
+        if (isset($user->status) && $user->status === 'pending') {
+            return response()->json(['message' => 'Your account is pending approval. Please contact admin via chat.'], 403);
+        }
+
+        if (isset($user->status) && $user->status === 'rejected') {
+            return response()->json(['message' => 'Your account registration was not approved. Please contact admin.'], 403);
+        }
+
         if (!$user->is_active) {
             return response()->json(['message' => 'Your account has been deactivated. Contact the administrator.'], 403);
         }
@@ -43,10 +51,11 @@ class AuthController extends Controller
             'message' => 'Login successful.',
             'token'   => $user->api_token,
             'user'    => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-                'role'  => $user->role,
+                'id'         => $user->id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'role'       => $user->role,
             ],
         ]);
     }
@@ -65,10 +74,11 @@ class AuthController extends Controller
         return response()->json([
             'valid' => true,
             'user'  => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-                'role'  => $user->role,
+                'id'         => $user->id,
+                'first_name' => $user->first_name,
+                'last_name'  => $user->last_name,
+                'email'      => $user->email,
+                'role'       => $user->role,
             ],
         ]);
     }

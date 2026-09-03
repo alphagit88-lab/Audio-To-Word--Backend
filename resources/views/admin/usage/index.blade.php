@@ -303,7 +303,7 @@
         <option value="">— All Users —</option>
         @foreach($users as $u)
             <option value="{{ $u->id }}" {{ $filterUser == $u->id ? 'selected' : '' }}>
-                {{ $u->name }} ({{ $u->email }})
+                {{ $u->first_name }} {{ $u->last_name }} ({{ $u->email }})
             </option>
         @endforeach
     </select>
@@ -342,9 +342,9 @@
                     <td style="color: #64748b; font-size: 0.78rem;">{{ $usage->id }}</td>
                     <td>
                         <div class="user-cell">
-                            <div class="user-avatar-sm">{{ strtoupper(substr($usage->user?->name ?? '?', 0, 1)) }}</div>
+                            <div class="user-avatar-sm">{{ strtoupper(substr($usage->user?->first_name ?? '?', 0, 1)) }}</div>
                             <div>
-                                <div class="user-name-sm">{{ $usage->user?->name ?? 'Deleted User' }}</div>
+                                <div class="user-name-sm">{{ $usage->user ? ($usage->user->first_name . ' ' . $usage->user->last_name) : 'Deleted User' }}</div>
                                 <div class="user-email-sm">{{ $usage->user?->email ?? '—' }}</div>
                             </div>
                         </div>

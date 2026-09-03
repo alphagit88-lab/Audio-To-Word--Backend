@@ -192,7 +192,7 @@
                 <tbody>
                     @forelse($recentUsers as $u)
                         <tr>
-                            <td style="font-weight: 500;">{{ $u->name }}</td>
+                            <td style="font-weight: 500;">{{ $u->first_name }} {{ $u->last_name }}</td>
                             <td style="font-family: monospace; color: var(--text-muted);">{{ $u->email }}</td>
                             <td>
                                 @if($u->role === 'admin')

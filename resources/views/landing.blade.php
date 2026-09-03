@@ -1328,6 +1328,16 @@
                     </svg>
                     Download
                 </a></li>
+            <li><a href="/login" class="nav-cta"
+                    style="background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.1);">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                        viewBox="0 0 24 24">
+                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                        <polyline points="10 17 15 12 10 7"></polyline>
+                        <line x1="15" y1="12" x2="3" y2="12"></line>
+                    </svg>
+                    Login
+                </a></li>
         </ul>
     </nav>
 

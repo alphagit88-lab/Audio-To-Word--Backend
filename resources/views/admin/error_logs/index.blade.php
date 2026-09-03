@@ -127,7 +127,7 @@
             @forelse($logs as $log)
                 <tr>
                     <td>
-                        <div style="font-weight: 600; color: var(--text-main);">{{ $log->user->name ?? 'Unknown User' }}</div>
+                        <div style="font-weight: 600; color: var(--text-main);">{{ $log->user ? ($log->user->first_name . ' ' . $log->user->last_name) : 'Unknown User' }}</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">{{ $log->user->email ?? 'N/A' }}</div>
                     </td>
                     <td>

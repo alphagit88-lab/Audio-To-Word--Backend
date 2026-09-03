@@ -52,6 +52,7 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [projectNameInput, setProjectNameInput] = useState('');
   const [isDictatingIdx, setIsDictatingIdx] = useState<number | null>(null);
+  const [dictationLiveText, setDictationLiveText] = useState('');
   const [selectedTextInfo, setSelectedTextInfo] = useState<{
     lineIdx: number;
     lineText: string;
@@ -185,8 +186,7 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
 
     // Stop if already running on this line
     if (isDictatingIdx === lineIdx) {
-      recognitionRef.current?.stop();
-      setIsDictatingIdx(null);
+      (recognitionRef as any).stopListening?.();
       return;
     }
 
@@ -198,58 +198,81 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = navigator.language || 'en-US';
-    recognitionRef.current = recognition;
+    // Track whether user has explicitly stopped (vs auto-stopped by silence)
+    const isListeningRef = { current: true };
     voiceTranscriptRef.current = '';
 
-    recognition.onresult = (event: any) => {
-      let interim = '';
-      let final = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          final += transcript + ' ';
-        } else {
-          interim += transcript;
+    const startRecognition = () => {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false; // Let browser fire onend naturally; we restart manually
+      recognition.interimResults = true;
+      recognition.lang = 'si-LK';
+      recognitionRef.current = recognition;
+
+      recognition.onresult = (event: any) => {
+        let interim = '';
+        let final = '';
+        const PUNCT_RE = /[.!?,;:\u0964\u0965]$/; // includes Sinhala danda ।
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const t = event.results[i][0].transcript.trim();
+          if (event.results[i].isFinal) {
+            // Append a period (or Sinhala danda for Sinhala text) if no punctuation at end
+            const isSinhala = /[\u0D80-\u0DFF]/.test(t);
+            const punct = PUNCT_RE.test(t) ? '' : (isSinhala ? '.' : '.');
+            final += t + punct + ' ';
+          } else {
+            interim += t;
+          }
         }
-      }
-      voiceTranscriptRef.current += final;
-      // Live preview: build new line text and push it immediately
-      const liveText = voiceTranscriptRef.current + interim;
-      const newLines = [...allLines];
-      if (selectedText) {
-        newLines[lineIdx] = lineText.replace(selectedText, liveText.trimEnd());
-      } else {
-        // Keep original timestamp if present, replace rest
-        const tsMatch = lineText.match(/(^[\[\(][\d:.,]+[\]\)]\s*)/);
-        const tsPrefix = tsMatch ? tsMatch[1] : '';
-        newLines[lineIdx] = tsPrefix + liveText;
-      }
-      onPartUpdated(selectedPart.chunkIndex, newLines.join('\n'));
+        if (final) voiceTranscriptRef.current += final;
+        setDictationLiveText(voiceTranscriptRef.current + interim);
+      };
+
+      recognition.onerror = (event: any) => {
+        if (event.error === 'no-speech') return; // silence — onend will auto-restart
+        if (event.error !== 'aborted') {
+          setError(`Voice input error: ${event.error}`);
+        }
+      };
+
+      recognition.onend = () => {
+        if (isListeningRef.current) {
+          // Silence pause — restart silently to keep recording
+          try { startRecognition(); } catch (_) {}
+          return;
+        }
+        // User clicked Stop — commit and clean up
+        const finalText = voiceTranscriptRef.current.trim();
+        if (finalText) {
+          const newLines = [...allLines];
+          if (selectedText) {
+            newLines[lineIdx] = lineText.replace(selectedText, finalText);
+          } else {
+            const tsMatch = lineText.match(/(^[\[\(][\d:.,]+[\]\)]\s*)/);
+            const tsPrefix = tsMatch ? tsMatch[1] : '';
+            newLines[lineIdx] = tsPrefix + finalText;
+          }
+          onPartUpdated(selectedPart.chunkIndex, newLines.join('\n'));
+          setSuccessMsg('Voice edit applied.');
+          setTimeout(() => setSuccessMsg(''), 2500);
+          setResubmittedSet((prev) => new Set([...prev, selectedPart.chunkIndex]));
+        }
+        setIsDictatingIdx(null);
+        setDictationLiveText('');
+        recognitionRef.current = null;
+      };
+
+      recognition.start();
     };
 
-    recognition.onerror = (event: any) => {
-      if (event.error !== 'aborted') {
-        setError(`Voice input error: ${event.error}`);
-      }
-      setIsDictatingIdx(null);
-      recognitionRef.current = null;
+    // Override the stop/cancel actions to set isListeningRef=false first
+    // We store a stop function in a special ref so the button handlers can call it
+    (recognitionRef as any).stopListening = () => {
+      isListeningRef.current = false;
+      recognitionRef.current?.stop();
     };
 
-    recognition.onend = () => {
-      setIsDictatingIdx(null);
-      recognitionRef.current = null;
-      if (voiceTranscriptRef.current.trim()) {
-        setSuccessMsg('Voice edit applied.');
-        setTimeout(() => setSuccessMsg(''), 2500);
-        setResubmittedSet((prev) => new Set([...prev, selectedPart.chunkIndex]));
-      }
-    };
-
-    recognition.start();
+    startRecognition();
     setIsDictatingIdx(lineIdx);
   };
 
@@ -345,77 +368,90 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
           onMouseLeave={() => setHoveredLineIdx(null)}
           onMouseUp={handleLineMouseUp}
         >
-          <span style={{ flex: 1, lineHeight: 1.8 }}>
-            {lineParts.map((part, i) => {
-              if (/^[\[\(]\d{1,2}:\d{2}/.test(part)) {
-                // Find this exact timestamp in the flattened list to get the next one
-                const tsIndex = allTimestamps.findIndex(t => t.lineIdx === lineIdx && t.ts === part);
-                const nextTs = tsIndex >= 0 && tsIndex + 1 < allTimestamps.length ? allTimestamps[tsIndex + 1].ts : undefined;
-
-                return (
-                  <span
-                    key={i}
-                    onClick={() => handleTimeClick(part, nextTs)}
-                    style={{
-                      color: '#818cf8',
-                      cursor: 'pointer',
-                      fontWeight: 700,
-                      marginRight: '0.35rem',
-                      padding: '0.1rem 0.35rem',
-                      borderRadius: '4px',
-                      background: 'rgba(99,102,241,0.12)',
-                      fontSize: '0.8rem',
-                      fontFamily: 'monospace',
-                      transition: 'background 0.15s',
-                      userSelect: 'none',
-                    }}
-                    title="Click to play this segment (auto-stops at next timestamp)"
-                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.28)')}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.12)')}
-                  >
-                    ▶ {part}
-                  </span>
-                );
-              }
-              if (speakerText && !replacedSpeaker && typeof part === 'string' && part.includes(`${speakerText}:`)) {
-                replacedSpeaker = true;
-                const splitIdx = part.indexOf(`${speakerText}:`) + speakerText.length;
-                const before = part.substring(0, splitIdx);
-                const after = part.substring(splitIdx);
-                const hasOptions = presetOptions.length > 0 || resetOptions.length > 0;
-                return (
-                  <span key={i}>
-                    {before}
-                    {hasOptions && (
-                      <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: '0.35rem', marginRight: '0.1rem', verticalAlign: 'middle', background: 'rgba(99,102,241,0.15)', borderRadius: '4px', padding: '0.1rem' }}>
-                        <ChevronDown size={14} color="#818cf8" style={{ cursor: 'pointer' }} />
-                        <select
-                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
-                          value=""
-                          onChange={(e) => handleInlineReplaceSpeaker(speakerText, e.target.value)}
-                          title="Rename this speaker (replaces all occurrences)"
-                        >
-                          <option value="" disabled>Rename all "{speakerText}"...</option>
-                          {presetOptions.length > 0 && (
-                            <optgroup label="Speaker Labels">
-                              {presetOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                            </optgroup>
-                          )}
-                          {resetOptions.length > 0 && (
-                            <optgroup label="Other detected speakers">
-                              {resetOptions.map(p => <option key={p} value={p}>{p}</option>)}
-                            </optgroup>
-                          )}
-                        </select>
-                      </div>
-                    )}
-                    {after}
-                  </span>
-                );
-              }
-              return <span key={i}>{part}</span>;
-            })}
-          </span>
+          {/* Line text with dictation overlay */}
+          <div style={{ flex: 1, position: 'relative', lineHeight: 1.8 }}>
+            <span style={{ opacity: isDictatingIdx === lineIdx ? 0.3 : 1, transition: 'opacity 0.2s' }}>
+              {lineParts.map((part, i) => {
+                if (/^[\[\(]\d{1,2}:\d{2}/.test(part)) {
+                  const tsIndex = allTimestamps.findIndex(t => t.lineIdx === lineIdx && t.ts === part);
+                  const nextTs = tsIndex >= 0 && tsIndex + 1 < allTimestamps.length ? allTimestamps[tsIndex + 1].ts : undefined;
+                  return (
+                    <span
+                      key={i}
+                      onClick={() => handleTimeClick(part, nextTs)}
+                      style={{
+                        color: '#818cf8',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        marginRight: '0.35rem',
+                        padding: '0.1rem 0.35rem',
+                        borderRadius: '4px',
+                        background: 'rgba(99,102,241,0.12)',
+                        fontSize: '0.8rem',
+                        fontFamily: 'monospace',
+                        transition: 'background 0.15s',
+                        userSelect: 'none',
+                      }}
+                      title="Click to play this segment (auto-stops at next timestamp)"
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.28)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99,102,241,0.12)')}
+                    >
+                      ▶ {part}
+                    </span>
+                  );
+                }
+                if (speakerText && !replacedSpeaker && typeof part === 'string' && part.includes(`${speakerText}:`)) {
+                  replacedSpeaker = true;
+                  const splitIdx = part.indexOf(`${speakerText}:`) + speakerText.length;
+                  const before = part.substring(0, splitIdx);
+                  const after = part.substring(splitIdx);
+                  const hasOptions = presetOptions.length > 0 || resetOptions.length > 0;
+                  return (
+                    <span key={i}>
+                      {before}
+                      {hasOptions && (
+                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', marginLeft: '0.35rem', marginRight: '0.1rem', verticalAlign: 'middle', background: 'rgba(99,102,241,0.15)', borderRadius: '4px', padding: '0.1rem' }}>
+                          <ChevronDown size={14} color="#818cf8" style={{ cursor: 'pointer' }} />
+                          <select
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                            value=""
+                            onChange={(e) => handleInlineReplaceSpeaker(speakerText, e.target.value)}
+                            title="Rename this speaker (replaces all occurrences)"
+                          >
+                            <option value="" disabled>Rename all "{speakerText}"...</option>
+                            {presetOptions.length > 0 && (
+                              <optgroup label="Speaker Labels">
+                                {presetOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                              </optgroup>
+                            )}
+                            {resetOptions.length > 0 && (
+                              <optgroup label="Other detected speakers">
+                                {resetOptions.map(p => <option key={p} value={p}>{p}</option>)}
+                              </optgroup>
+                            )}
+                          </select>
+                        </div>
+                      )}
+                      {after}
+                    </span>
+                  );
+                }
+                return <span key={i}>{part}</span>;
+              })}
+            </span>
+            {/* Live dictation preview - shown on top when mic is active */}
+            {isDictatingIdx === lineIdx && (
+              <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0,
+                color: '#34d399', fontWeight: 500,
+                pointerEvents: 'none',
+                lineHeight: 1.8,
+              }}>
+                {dictationLiveText || <span style={{ opacity: 0.5 }}>Listening…</span>}
+                <span style={{ opacity: 0.7, marginLeft: '2px' }}>|</span>
+              </div>
+            )}
+          </div>
           {hasTimestamp && (
             <div style={{
               position: 'absolute',
@@ -476,13 +512,13 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
                 {isDictatingIdx === lineIdx ? <Square size={13} /> : <Mic size={13} />}
               </button>
 
-              {/* Cancel voice edit button */}
+                {/* Cancel voice edit button */}
               {isDictatingIdx === lineIdx && (
                 <button
                   onClick={() => {
-                    recognitionRef.current?.abort();
-                    setIsDictatingIdx(null);
-                    recognitionRef.current = null;
+                    // Discard: stop without committing transcript
+                    voiceTranscriptRef.current = '';
+                    (recognitionRef as any).stopListening?.();
                   }}
                   style={{
                     background: 'rgba(20,22,40,0.92)',
@@ -602,9 +638,9 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
       borderRadius: '8px',
       border: isActive ? (isResubmitted ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(99,102,241,0.4)') : '1px solid transparent',
       background: isActive
-        ? (isResubmitted 
-            ? 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)'
-            : 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 100%)')
+        ? (isResubmitted
+          ? 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)'
+          : 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 100%)')
         : 'none',
       color: isActive ? (isResubmitted ? '#fbbf24' : '#e2e8f0') : isDone ? (isResubmitted ? '#fcd34d' : '#94a3b8') : '#475569',
       fontSize: '0.82rem',
@@ -829,12 +865,12 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
             </div>
 
             {/* Audio Player */}
-            {selectedPart?.audioChunkPaths?.[0] && (
+            {selectedPart?.primaryAudioFilePath && (
               <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(10,16,30,0.5)', flexShrink: 0 }}>
                 <audio
                   ref={setAudioRef}
                   controls
-                  src={`file:///${selectedPart.audioChunkPaths[0].replace(/\\/g, '/')}`}
+                  src={selectedPart.primaryAudioFilePath}
                   style={{ width: '100%', height: '36px', outline: 'none' }}
                 />
               </div>

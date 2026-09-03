@@ -1,12 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Edit3, Trash2, X, Check, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Edit3, Trash2, X, Check, Eye, EyeOff, AlertCircle, Clock, CheckCircle2, XCircle, FileText, Phone } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 
 interface User {
   id: number;
-  name: string;
+  first_name: string;
+  last_name: string;
   email: string;
   is_active: boolean;
+  created_at: string;
+}
+
+interface PendingUser {
+  id: number;
+  name: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  status: string;
+  payment_proof: string | null;
   created_at: string;
 }
 
@@ -16,14 +29,18 @@ interface UserManagementProps {
 
 export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
   const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'approved' | 'pending'>('approved');
   const [users, setUsers] = useState<User[]>([]);
+  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingBadge, setPendingBadge] = useState(0);
+  const [viewingProof, setViewingProof] = useState<string | null>(null);
 
   // Form states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', is_active: true });
+  const [formData, setFormData] = useState({ first_name: '', last_name: '', email: '', password: '', is_active: true });
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,23 +50,49 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
     setError(null);
     try {
       const baseUrl = import.meta.env.VITE_API_URL || '';
-      const response = await fetch(`${baseUrl}/api/admin/users`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch users.');
+      const [usersRes, pendingRes] = await Promise.all([
+        fetch(`${baseUrl}/api/admin/users`, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }),
+        fetch(`${baseUrl}/api/admin/pending-users`, { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' } }),
+      ]);
+      if (usersRes.ok) {
+        const d = await usersRes.json();
+        setUsers(d.users || []);
       }
-      setUsers(data.users || []);
+      if (pendingRes.ok) {
+        const d = await pendingRes.json();
+        setPendingUsers(d.users || []);
+        setPendingBadge((d.users || []).length);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load users.');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleApprove = async (id: number) => {
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    try {
+      const res = await fetch(`${baseUrl}/api/admin/pending-users/${id}/approve`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      if (res.ok) fetchUsers();
+      else throw new Error((await res.json()).message);
+    } catch (err: any) { alert(err.message || 'Failed to approve.'); }
+  };
+
+  const handleReject = async (id: number) => {
+    if (!confirm('Reject this registration?')) return;
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    try {
+      const res = await fetch(`${baseUrl}/api/admin/pending-users/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+      });
+      if (res.ok) fetchUsers();
+      else throw new Error((await res.json()).message);
+    } catch (err: any) { alert(err.message || 'Failed to reject.'); }
   };
 
   useEffect(() => {
@@ -58,14 +101,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
 
   const handleOpenCreate = () => {
     setEditingUser(null);
-    setFormData({ name: '', email: '', password: '', is_active: true });
+    setFormData({ first_name: '', last_name: '', email: '', password: '', is_active: true });
     setFormError(null);
     setIsFormOpen(true);
   };
 
   const handleOpenEdit = (user: User) => {
     setEditingUser(user);
-    setFormData({ name: user.name, email: user.email, password: '', is_active: user.is_active });
+    setFormData({ first_name: user.first_name || '', last_name: user.last_name || '', email: user.email, password: '', is_active: user.is_active });
     setFormError(null);
     setIsFormOpen(true);
   };
@@ -80,8 +123,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
     e.preventDefault();
     setFormError(null);
 
-    if (!formData.name.trim() || !formData.email.trim()) {
-      setFormError('Name and Email are required.');
+    if (!formData.first_name.trim() || !formData.last_name.trim() || !formData.email.trim()) {
+      setFormError('First Name, Last Name and Email are required.');
       return;
     }
 
@@ -98,7 +141,8 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
       : `${baseUrl}/api/admin/users`;
 
     const payload: any = {
-      name: formData.name,
+      first_name: formData.first_name,
+      last_name: formData.last_name,
       email: formData.email,
       is_active: formData.is_active,
     };
@@ -158,31 +202,52 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
 
   return (
     <div style={{ width: '100%', animation: 'fadeIn 0.3s ease-out' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Users size={20} />
-          {t('users.title')}
-        </h2>
-        <button
-          onClick={handleOpenCreate}
-          style={{
-            background: 'linear-gradient(135deg, var(--primary-accent) 0%, var(--secondary-accent) 100%)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '0.5rem 1rem',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)',
-          }}
-        >
-          <UserPlus size={16} />
-          {t('users.btn_add')}
-        </button>
+
+      {/* Payment proof lightbox */}
+      {viewingProof && (
+        <div onClick={() => setViewingProof(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out' }}>
+          {viewingProof.endsWith('.pdf') ? (
+            <iframe src={viewingProof} style={{ width: '80vw', height: '85vh', border: 'none', borderRadius: '10px' }} />
+          ) : (
+            <img src={viewingProof} alt="Payment proof" style={{ maxWidth: '85vw', maxHeight: '85vh', borderRadius: '10px', objectFit: 'contain' }} />
+          )}
+          <button onClick={() => setViewingProof(null)} style={{ position: 'absolute', top: '1rem', right: '1.5rem', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: 36, height: 36, color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => setActiveTab('approved')}
+            style={{ background: activeTab === 'approved' ? 'rgba(99,102,241,0.15)' : 'none', border: activeTab === 'approved' ? '1px solid rgba(99,102,241,0.3)' : '1px solid transparent', borderRadius: '7px', color: activeTab === 'approved' ? '#a5b4fc' : '#94a3b8', padding: '0.4rem 0.9rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s' }}
+          >
+            <Users size={13} />
+            Active Users
+          </button>
+          <button
+            onClick={() => setActiveTab('pending')}
+            style={{ background: activeTab === 'pending' ? 'rgba(245,158,11,0.15)' : 'none', border: activeTab === 'pending' ? '1px solid rgba(245,158,11,0.3)' : '1px solid transparent', borderRadius: '7px', color: activeTab === 'pending' ? '#fbbf24' : '#94a3b8', padding: '0.4rem 0.9rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', transition: 'all 0.2s', position: 'relative' }}
+          >
+            <Clock size={13} />
+            Pending
+            {pendingBadge > 0 && (
+              <span style={{ background: '#f59e0b', color: '#000', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 700, padding: '0.05rem 0.4rem', marginLeft: '0.2rem' }}>{pendingBadge}</span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === 'approved' && (
+          <button
+            onClick={handleOpenCreate}
+            style={{ background: 'linear-gradient(135deg, var(--primary-accent) 0%, var(--secondary-accent) 100%)', color: '#ffffff', border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}
+          >
+            <UserPlus size={16} />
+            {t('users.btn_add')}
+          </button>
+        )}
       </div>
 
       {error && (
@@ -192,7 +257,62 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
         </div>
       )}
 
-      {isLoading ? (
+      {/* ── Pending Users Tab ── */}
+      {activeTab === 'pending' && (
+        isLoading ? (
+          <div style={{ textAlign: 'center', padding: '3rem 0', color: '#94a3b8' }}>Loading...</div>
+        ) : pendingUsers.length === 0 ? (
+          <div className="glass-panel" style={{ textAlign: 'center', padding: '3rem 2rem', color: '#94a3b8' }}>
+            <CheckCircle2 size={32} color="#34d399" style={{ marginBottom: '0.75rem' }} />
+            <div>No pending registrations</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {pendingUsers.map(pu => (
+              <div key={pu.id} className="glass-panel" style={{ padding: '1.1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#f8fafc', fontSize: '0.95rem' }}>{pu.first_name} {pu.last_name}</div>
+                    <div style={{ color: '#818cf8', fontFamily: 'monospace', fontSize: '0.82rem' }}>{pu.email}</div>
+                    {pu.phone && (
+                      <div style={{ color: '#94a3b8', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.3rem', marginTop: '0.2rem' }}>
+                        <Phone size={11} /> {pu.phone}
+                      </div>
+                    )}
+                    <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: '0.2rem' }}>Registered: {new Date(pu.created_at).toLocaleDateString()}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {pu.payment_proof && (
+                      <button
+                        onClick={() => setViewingProof(pu.payment_proof!)}
+                        style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '6px', color: '#a5b4fc', padding: '0.35rem 0.7rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      >
+                        <FileText size={13} /> Payment Proof
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleApprove(pu.id)}
+                      style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: '6px', color: '#34d399', padding: '0.35rem 0.7rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    >
+                      <CheckCircle2 size={13} /> Approve
+                    </button>
+                    <button
+                      onClick={() => handleReject(pu.id)}
+                      style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '6px', color: '#fca5a5', padding: '0.35rem 0.7rem', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    >
+                      <XCircle size={13} /> Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* ── Active Users Tab ── */}
+      {activeTab === 'approved' && (
+        isLoading ? (
         <div style={{ textAlign: 'center', padding: '3rem 0', color: '#94a3b8' }}>
           Loading users...
         </div>
@@ -214,7 +334,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)'} onMouseLeave={(e) => e.currentTarget.style.background = 'none'}>
-                  <td style={{ padding: '1rem', fontWeight: 500, color: '#f8fafc' }}>{user.name}</td>
+                  <td style={{ padding: '1rem', fontWeight: 500, color: '#f8fafc' }}>{user.first_name} {user.last_name}</td>
                   <td style={{ padding: '1rem', color: '#cbd5e1', fontFamily: 'monospace' }}>{user.email}</td>
                   <td style={{ padding: '1rem', textAlign: 'center' }}>
                     <span style={{
@@ -257,7 +377,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
       {/* Modal Dialog Form */}
       {isFormOpen && (
@@ -282,26 +402,49 @@ export const UserManagement: React.FC<UserManagementProps> = ({ token }) => {
             )}
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>{t('modal.name_label')}</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder={t('modal.name_placeholder')}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(15, 23, 42, 0.6)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '8px',
-                    padding: '0.7rem 0.9rem',
-                    fontSize: '0.85rem',
-                    color: '#e2e8f0',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>First Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.first_name}
+                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+                    placeholder="John"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '8px',
+                      padding: '0.7rem 0.9rem',
+                      fontSize: '0.85rem',
+                      color: '#e2e8f0',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>Last Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.last_name}
+                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+                    placeholder="Doe"
+                    style={{
+                      width: '100%',
+                      background: 'rgba(15, 23, 42, 0.6)',
+                      border: '1px solid rgba(255, 255, 255, 0.1)',
+                      borderRadius: '8px',
+                      padding: '0.7rem 0.9rem',
+                      fontSize: '0.85rem',
+                      color: '#e2e8f0',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>

@@ -3,10 +3,11 @@ import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 
 interface LoginProps {
-  onLoginSuccess: (token: string, user: { id: number; name: string; email: string; role: 'admin' | 'user' }) => void;
+  onLoginSuccess: (token: string, user: { id: number; first_name: string; last_name: string; email: string; role: 'admin' | 'user' }) => void;
+  onGoToRegister?: () => void;
 }
 
-export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGoToRegister }) => {
   const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -55,7 +56,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: '100%', minHeight: '80vh', padding: '1rem' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-start', width: '100%', minHeight: '80vh', padding: '1.5rem 1rem', overflowY: 'auto' }}>
       <div className="glass-panel" style={{ width: '100%', maxWidth: '420px', padding: '2.5rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'fadeIn 0.5s ease-out' }}>
         <div style={{ textAlign: 'center' }}>
           <h2 style={{ fontSize: '1.8rem', fontWeight: 700, background: 'linear-gradient(135deg, #a5b4fc 0%, #6366f1 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', marginBottom: '0.5rem' }}>
@@ -151,7 +152,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
-              boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+              boxShadow: '0 2px 6px rgba(99, 102, 241, 0.15)',
               opacity: isLoading ? 0.7 : 1,
               transition: 'opacity 0.2s, transform 0.1s',
             }}
@@ -162,6 +163,36 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             {!isLoading && <LogIn size={16} />}
           </button>
         </form>
+
+        <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+          <a
+            href="/"
+            style={{
+              color: '#64748b',
+              fontSize: '0.85rem',
+              textDecoration: 'none',
+              transition: 'color 0.2s'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = '#94a3b8')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+          >
+            ← Back to Home
+          </a>
+        </div>
+
+        {onGoToRegister && (
+          <div style={{ textAlign: 'center', marginTop: '-0.5rem' }}>
+            <span style={{ color: '#475569', fontSize: '0.85rem' }}>Don't have an account? </span>
+            <button
+              onClick={onGoToRegister}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#818cf8', fontSize: '0.85rem', fontWeight: 600, padding: 0 }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#a5b4fc')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#818cf8')}
+            >
+              Create account
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
