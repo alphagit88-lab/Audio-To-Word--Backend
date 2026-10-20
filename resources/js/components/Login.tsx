@@ -3,7 +3,7 @@ import { Mail, Lock, LogIn, AlertCircle } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 
 interface LoginProps {
-  onLoginSuccess: (token: string, user: { id: number; first_name: string; last_name: string; email: string; role: 'admin' | 'user' }) => void;
+  onLoginSuccess: (token: string, user: { id: number; first_name: string; last_name: string; email: string; role: 'admin' | 'user'; status?: string; is_active?: boolean }) => void;
   onGoToRegister?: () => void;
 }
 
@@ -164,35 +164,76 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onGoToRegister }) 
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.25rem' }}>
+          {onGoToRegister && (
+            <button
+              onClick={onGoToRegister}
+              style={{
+                width: '100%',
+                background: 'rgba(129,140,248,0.08)',
+                color: '#a5b4fc',
+                border: '1.5px solid rgba(129,140,248,0.25)',
+                borderRadius: '10px',
+                padding: '0.9rem',
+                fontSize: '0.95rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(129,140,248,0.16)';
+                e.currentTarget.style.borderColor = 'rgba(129,140,248,0.5)';
+                e.currentTarget.style.color = '#c4b5fd';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(129,140,248,0.08)';
+                e.currentTarget.style.borderColor = 'rgba(129,140,248,0.25)';
+                e.currentTarget.style.color = '#a5b4fc';
+              }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.98)'; }}
+              onMouseUp={e => { e.currentTarget.style.transform = 'none'; }}
+            >
+              Don't have an account? Create one →
+            </button>
+          )}
           <a
             href="/"
             style={{
+              width: '100%',
+              background: 'rgba(255,255,255,0.04)',
               color: '#64748b',
-              fontSize: '0.85rem',
+              border: '1.5px solid rgba(255,255,255,0.07)',
+              borderRadius: '10px',
+              padding: '0.9rem',
+              fontSize: '0.95rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
               textDecoration: 'none',
-              transition: 'color 0.2s'
+              transition: 'background 0.2s, border-color 0.2s, color 0.2s',
+              boxSizing: 'border-box',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = '#94a3b8')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+              e.currentTarget.style.color = '#94a3b8';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+              e.currentTarget.style.color = '#64748b';
+            }}
           >
             ← Back to Home
           </a>
         </div>
-
-        {onGoToRegister && (
-          <div style={{ textAlign: 'center', marginTop: '-0.5rem' }}>
-            <span style={{ color: '#475569', fontSize: '0.85rem' }}>Don't have an account? </span>
-            <button
-              onClick={onGoToRegister}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#818cf8', fontSize: '0.85rem', fontWeight: 600, padding: 0 }}
-              onMouseEnter={e => (e.currentTarget.style.color = '#a5b4fc')}
-              onMouseLeave={e => (e.currentTarget.style.color = '#818cf8')}
-            >
-              Create account
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

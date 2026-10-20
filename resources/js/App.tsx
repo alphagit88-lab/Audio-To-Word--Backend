@@ -7,6 +7,7 @@ import { Register } from './components/Register';
 import { UserManagement } from './components/UserManagement';
 import { TranscriptionReviewPanel } from './components/TranscriptionReviewPanel';
 import { ProjectsPage } from './components/ProjectsPage';
+import { InlineSupportChat } from './components/InlineSupportChat';
 import { AudioFileInfo, ConversionProgress, ConversionResult, ConversionResumeState, ConversionPromptOptions, TranscriptionPart, SavedProject } from './types';
 import { LogOut, FileAudio, Users, Clock, FolderKanban } from 'lucide-react';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
@@ -26,6 +27,8 @@ interface AuthUser {
   last_name: string;
   email: string;
   role: 'admin' | 'user';
+  status?: string;
+  is_active?: boolean;
 }
 
 const MainAppContent: React.FC = () => {
@@ -530,8 +533,8 @@ const MainAppContent: React.FC = () => {
 
       {/* Navigation Sub-bar */}
       <div style={{ background: 'rgba(15, 23, 42, 0.4)', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', padding: '0.5rem 2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {user.role === 'admin' ? (
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
+          {user.role === 'admin' && (user.is_active !== false && user.status !== 'pending' && user.status !== 'rejected') ? (
             <>
               <button
                 onClick={() => setActiveTab('converter')}
@@ -594,51 +597,51 @@ const MainAppContent: React.FC = () => {
                 {t('nav.users')}
               </button>
             </>
-          ) : (
-            <>
-              <button
-                onClick={() => setActiveTab('converter')}
-                style={{
-                  background: activeTab === 'converter' ? 'rgba(99, 102, 241, 0.15)' : 'none',
-                  border: activeTab === 'converter' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
-                  borderRadius: '6px',
-                  color: activeTab === 'converter' ? '#a5b4fc' : '#94a3b8',
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <FileAudio size={14} />
-                {t('nav.converter')}
-              </button>
-              <button
-                onClick={() => setActiveTab('projects')}
-                style={{
-                  background: activeTab === 'projects' ? 'rgba(99, 102, 241, 0.15)' : 'none',
-                  border: activeTab === 'projects' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
-                  borderRadius: '6px',
-                  color: activeTab === 'projects' ? '#a5b4fc' : '#94a3b8',
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <FolderKanban size={14} />
-                Projects
-              </button>
-            </>
-          )}
-        </div>
+            ) : (user.is_active !== false && user.status !== 'pending' && user.status !== 'rejected') ? (
+              <>
+                <button
+                  onClick={() => setActiveTab('converter')}
+                  style={{
+                    background: activeTab === 'converter' ? 'rgba(99, 102, 241, 0.15)' : 'none',
+                    border: activeTab === 'converter' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
+                    borderRadius: '6px',
+                    color: activeTab === 'converter' ? '#a5b4fc' : '#94a3b8',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <FileAudio size={14} />
+                  {t('nav.converter')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('projects')}
+                  style={{
+                    background: activeTab === 'projects' ? 'rgba(99, 102, 241, 0.15)' : 'none',
+                    border: activeTab === 'projects' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid transparent',
+                    borderRadius: '6px',
+                    color: activeTab === 'projects' ? '#a5b4fc' : '#94a3b8',
+                    padding: '0.4rem 0.8rem',
+                    fontSize: '0.8rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <FolderKanban size={14} />
+                  Projects
+                </button>
+              </>
+            ) : null}
+          </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {usageStats && (
@@ -679,7 +682,33 @@ const MainAppContent: React.FC = () => {
       {/* Full-width scroll container */}
       <div style={{ flex: 1, overflowY: 'auto', width: '100%' }}>
         <main style={{ padding: '1.5rem 2rem 2.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', maxWidth: '680px', width: '100%', margin: '0 auto', gap: '1.25rem' }}>
-          {activeTab === 'converter' ? (
+          {user.is_active === false || user.status === 'pending' || user.status === 'rejected' ? (
+            <div style={{ width: '100%', marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Status Card */}
+              <div style={{
+                background: 'rgba(30, 41, 59, 0.7)',
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                borderRadius: '16px',
+                padding: '2.5rem 2rem',
+                textAlign: 'center',
+              }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '64px', height: '64px', borderRadius: '50%', background: user.status === 'rejected' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)', color: user.status === 'rejected' ? '#ef4444' : '#f59e0b', marginBottom: '1.5rem' }}>
+                  <Clock size={32} />
+                </div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.75rem' }}>
+                  {user.status === 'rejected' ? 'Account Not Approved' : 'Account Pending Approval'}
+                </h2>
+                <p style={{ color: '#94a3b8', fontSize: '1rem', lineHeight: 1.6, maxWidth: '440px', margin: '0 auto' }}>
+                  {user.status === 'rejected'
+                    ? 'Your registration was not approved. Please contact the administrator via the chat below to appeal or get more information.'
+                    : 'Your account is awaiting admin approval. In the meantime, use the chat below to contact the admin.'}
+                </p>
+              </div>
+
+              {/* Inline Chat */}
+              <InlineSupportChat userEmail={user.email} userName={`${user.first_name} ${user.last_name}`} baseUrl={baseUrl} />
+            </div>
+          ) : activeTab === 'converter' ? (
             <>
               <AudioPicker
                 selectedFiles={selectedFiles}

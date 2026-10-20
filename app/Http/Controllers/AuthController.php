@@ -29,17 +29,8 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid email or password.'], 401);
         }
 
-        if (isset($user->status) && $user->status === 'pending') {
-            return response()->json(['message' => 'Your account is pending approval. Please contact admin via chat.'], 403);
-        }
-
-        if (isset($user->status) && $user->status === 'rejected') {
-            return response()->json(['message' => 'Your account registration was not approved. Please contact admin.'], 403);
-        }
-
-        if (!$user->is_active) {
-            return response()->json(['message' => 'Your account has been deactivated. Contact the administrator.'], 403);
-        }
+        // Removed 403 checks for pending/rejected/inactive accounts. 
+        // Frontend will handle blocking access to features based on status.
 
         // Generate a token if not already present
         if (!$user->api_token) {
@@ -56,6 +47,8 @@ class AuthController extends Controller
                 'last_name'  => $user->last_name,
                 'email'      => $user->email,
                 'role'       => $user->role,
+                'status'     => $user->status,
+                'is_active'  => $user->is_active,
             ],
         ]);
     }
@@ -79,6 +72,8 @@ class AuthController extends Controller
                 'last_name'  => $user->last_name,
                 'email'      => $user->email,
                 'role'       => $user->role,
+                'status'     => $user->status,
+                'is_active'  => $user->is_active,
             ],
         ]);
     }

@@ -5,12 +5,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description"
-        content="Happy Steno — Convert audio files into perfectly formatted Microsoft Word documents in minutes. AI-powered transcription for Windows.">
+        content="Happy Steno — Convert audio files into perfectly formatted Microsoft Word documents in minutes. AI-powered web-based transcription.">
     <meta name="keywords"
-        content="audio to word, transcription, speech to text, audio transcription, docx, Happy Steno">
+        content="audio to word, transcription, speech to text, audio transcription, docx, Happy Steno, web app, AI transcription">
     <meta property="og:title" content="Happy Steno — Audio to Word, Effortlessly">
     <meta property="og:description"
-        content="AI-powered desktop app that converts audio files into formatted Word documents. Fast, accurate, and private.">
+        content="Happy Steno - AI-powered web app that converts audio files into formatted Word documents. Fast, accurate transcription powered by Gemini AI.">
     <meta property="og:type" content="website">
     <title>Happy Steno — Audio to Word, Effortlessly</title>
 
@@ -188,6 +188,32 @@
             opacity: 0.9 !important;
             transform: translateY(-1px) !important;
             box-shadow: 0 4px 30px var(--primary-glow) !important;
+        }
+
+        .nav-cta-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.75) !important;
+            border-radius: 50px;
+            border: 1.5px solid rgba(255, 255, 255, 0.18);
+            font-weight: 500;
+            font-size: 0.875rem;
+            transition: color 0.2s, border-color 0.2s, background 0.2s !important;
+        }
+
+        .nav-cta-ghost:hover {
+            color: #fff !important;
+            border-color: rgba(255, 255, 255, 0.45) !important;
+            background: rgba(255, 255, 255, 0.07) !important;
+        }
+
+        .nav-auth-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         /* ── HERO ────────────────────────────────────────────────────────── */
@@ -1319,17 +1345,9 @@
         <ul class="nav-links">
             <li><a href="#features">Features</a></li>
             <li><a href="#how-it-works">How It Works</a></li>
-            <li><a href="#download" class="nav-cta">
-                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
-                        viewBox="0 0 24 24">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                    Download
-                </a></li>
-            <li><a href="/login" class="nav-cta"
-                    style="background: rgba(255,255,255,0.05); color: #fff; border-color: rgba(255,255,255,0.1);">
+
+            <li class="nav-auth-group">
+                <a href="/login" class="nav-cta-ghost">
                     <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
                         viewBox="0 0 24 24">
                         <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
@@ -1337,7 +1355,18 @@
                         <line x1="15" y1="12" x2="3" y2="12"></line>
                     </svg>
                     Login
-                </a></li>
+                </a>
+                <a href="/register" class="nav-cta">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"
+                        viewBox="0 0 24 24">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <line x1="19" y1="8" x2="19" y2="14"></line>
+                        <line x1="22" y1="11" x2="16" y2="11"></line>
+                    </svg>
+                    Register
+                </a>
+            </li>
         </ul>
     </nav>
 
@@ -1359,13 +1388,13 @@
         </p>
 
         <div class="hero-actions" data-reveal>
-            <a href="#download" class="btn-primary" id="hero-download-btn">
+            <a href="/login" class="btn-primary" id="hero-get-started-btn">
                 <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                    <polyline points="10 17 15 12 10 7"></polyline>
+                    <line x1="15" y1="12" x2="3" y2="12"></line>
                 </svg>
-                Download for Windows
+                Get Started — It's Free
             </a>
             <a href="#features" class="btn-secondary" id="learn-more-btn">
                 Learn more
@@ -1456,7 +1485,7 @@
                             <svg width="10" height="10" fill="currentColor" viewBox="0 0 24 24">
                                 <path d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
                             </svg>
-                            Ready to download
+                            Ready to export
                         </div>
                     </div>
                     <span class="wf-step-title">Word Document</span>
@@ -1610,80 +1639,131 @@
                         your perfectly formatted Word document.</p>
                 </div>
             </div>
+
+            <!-- Video Tutorials -->
+            <div class="video-tutorials-section" data-reveal
+                style="margin-top: 6rem; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 5rem;">
+                <div class="steps-header" style="text-align:center; margin-bottom: 4rem;">
+                    <h2 class="section-title">See Happy Steno in <span class="gradient-text">Action</span></h2>
+                    <p
+                        style="color: var(--text-muted); max-width: 600px; margin: 1.5rem auto 0; font-size: 1.15rem; line-height: 1.6;">
+                        Watch our quick tutorials to discover how easily you can transform spoken words into perfectly
+                        formatted documents.
+                    </p>
+                </div>
+
+                <div class="video-tutorials"
+                    style="display: flex; flex-wrap: wrap; gap: 3rem; justify-content: center;">
+                    <div class="video-wrapper"
+                        style="flex: 1; min-width: 300px; max-width: 520px; display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div class="video-info" style="text-align: left;">
+                            <div class="section-tag" style="margin-bottom: 0.75rem; display: inline-flex;">Getting
+                                Started</div>
+                            <h3 style="color: var(--text-main); font-size: 1.4rem; font-weight: 600;">Platform
+                                Walkthrough</h3>
+                            <p style="color: var(--text-muted); font-size: 1rem; margin-top: 0.5rem; line-height: 1.5;">
+                                Learn how to navigate the dashboard, manage your account, and access all essential
+                                features.</p>
+                        </div>
+                        <div
+                            style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4); background: #0f172a;">
+                            <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+                                src="https://www.youtube.com/embed/kKxS7S6pSX8?enablejsapi=1&rel=0"
+                                referrerpolicy="strict-origin-when-cross-origin" title="Platform Walkthrough Tutorial"
+                                frameborder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen></iframe>
+                        </div>
+                    </div>
+
+                    <div class="video-wrapper"
+                        style="flex: 1; min-width: 300px; max-width: 520px; display: flex; flex-direction: column; gap: 1.5rem;">
+                        <div class="video-info" style="text-align: left;">
+                            <div class="section-tag" style="margin-bottom: 0.75rem; display: inline-flex;">Core Workflow
+                            </div>
+                            <h3 style="color: var(--text-main); font-size: 1.4rem; font-weight: 600;">Audio to Document
+                                Conversion</h3>
+                            <p style="color: var(--text-muted); font-size: 1rem; margin-top: 0.5rem; line-height: 1.5;">
+                                A step-by-step guide showing how to upload audio, use AI for transcription, and export
+                                to Word.</p>
+                        </div>
+                        <div
+                            style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 40px rgba(0,0,0,0.4); background: #0f172a;">
+                            <iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;"
+                                src="https://www.youtube.com/embed/GTmvsncsEq4?enablejsapi=1&rel=0"
+                                referrerpolicy="strict-origin-when-cross-origin" title="Core Workflow Tutorial"
+                                frameborder="0"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </section>
 
-    <!-- ── DOWNLOAD ── -->
-    <section id="download">
+    <!-- ── GET STARTED CTA ── -->
+    <section id="get-started">
         <div class="section-inner">
             <div class="download-inner">
                 <div class="download-text" data-reveal>
                     <div class="section-tag">
                         <svg width="12" height="12" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                            <polyline points="10 17 15 12 10 7"></polyline>
+                            <line x1="15" y1="12" x2="3" y2="12"></line>
                         </svg>
-                        Download
+                        Get Started
                     </div>
                     <h2 class="section-title">Ready to start<br><span class="gradient-text">transcribing smarter?</span>
                     </h2>
                     <p class="section-subtitle" style="margin-bottom:32px;">
-                        Happy Steno is a native Windows desktop application. Download, install, and you're ready — no
-                        browser, no cloud uploads, your audio stays on your machine.
+                        Happy Steno runs entirely in your browser — no installation needed. Register for an account, get approved, and start converting audio to polished Word documents instantly.
                     </p>
                     <ul style="list-style:none; display:flex; flex-direction:column; gap:12px;">
-                        <li
-                            style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
-                            <span style="color:var(--success);font-size:1rem;">✓</span> Free to download and install
+                        <li style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
+                            <span style="color:var(--success);font-size:1rem;">✓</span> No installation required — runs in any browser
                         </li>
-                        <li
-                            style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
-                            <span style="color:var(--success);font-size:1rem;">✓</span> Auto-updates built in
+                        <li style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
+                            <span style="color:var(--success);font-size:1rem;">✓</span> Powered by cutting-edge Gemini AI
                         </li>
-                        <li
-                            style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
-                            <span style="color:var(--success);font-size:1rem;">✓</span> Your audio never leaves your
-                            device
+                        <li style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
+                            <span style="color:var(--success);font-size:1rem;">✓</span> Speaker labels, custom prompts &amp; Word export
                         </li>
-                        <li
-                            style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
-                            <span style="color:var(--success);font-size:1rem;">✓</span> Supports all common audio
-                            formats
+                        <li style="display:flex;align-items:center;gap:10px;color:var(--text-secondary);font-size:0.9rem;">
+                            <span style="color:var(--success);font-size:1rem;">✓</span> Secure, fast, and always up to date
                         </li>
                     </ul>
                 </div>
 
                 <div class="download-box" data-reveal>
-                    <div class="download-card">
-                        <span class="os-icon">🪟</span>
-                        <div class="os-name">Windows</div>
-                        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">
-                            v{{ config('app.version', '1.0.5') }}</div>
-                        <div class="version-badge">Latest Stable</div>
+                    <div class="download-card" style="text-align:center;">
+                        <span class="os-icon">🌐</span>
+                        <div class="os-name">Web App</div>
+                        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">Works on any device</div>
+                        <div class="version-badge">Always Latest</div>
 
-                        <a href="/releases/HappyStenoSetup.exe" class="download-btn" id="win-download-btn">
-                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"
-                                viewBox="0 0 24 24">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
+                        <a href="/register" class="download-btn" id="register-btn" style="margin-top:1.5rem;">
+                            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="9" cy="7" r="4"></circle>
+                                <line x1="19" y1="8" x2="19" y2="14"></line>
+                                <line x1="22" y1="11" x2="16" y2="11"></line>
                             </svg>
-                            Download Installer (.exe)
+                            Create Free Account
                         </a>
 
-                        <a href="/releases/HappyStenoPortable.exe" class="download-btn" id="portable-download-btn"
+                        <a href="/login" class="download-btn" id="login-cta-btn"
                             style="background:transparent;border:1px solid rgba(99,102,241,0.35);color:var(--text-secondary);box-shadow:none;font-size:0.9rem;padding:12px;">
-                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
-                                viewBox="0 0 24 24">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                <polyline points="7 10 12 15 17 10" />
-                                <line x1="12" y1="15" x2="12" y2="3" />
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                                <polyline points="10 17 15 12 10 7"></polyline>
+                                <line x1="15" y1="12" x2="3" y2="12"></line>
                             </svg>
-                            Portable Version (.exe)
+                            Sign In to Your Account
                         </a>
 
-                        <p class="download-requirements">Requires Windows 10 / 11 &nbsp;·&nbsp; 64-bit</p>
+                        <p class="download-requirements">Works on Chrome, Firefox, Edge &amp; Safari</p>
                     </div>
                 </div>
             </div>
@@ -1700,7 +1780,9 @@
         <ul class="footer-links">
             <li><a href="#features">Features</a></li>
             <li><a href="#how-it-works">How It Works</a></li>
-            <li><a href="#download">Download</a></li>
+            <li><a href="#get-started">Get Started</a></li>
+            <li><a href="/login">Login</a></li>
+            <li><a href="/register">Register</a></li>
         </ul>
 
         <p class="footer-copy">&copy; {{ date('Y') }} Happy Steno. All rights reserved.</p>
