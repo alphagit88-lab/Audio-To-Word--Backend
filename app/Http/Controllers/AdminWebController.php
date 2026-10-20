@@ -87,8 +87,8 @@ class AdminWebController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
@@ -103,18 +103,21 @@ class AdminWebController extends Controller
     public function userStore(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6',
             'is_active' => 'nullable|boolean',
         ]);
 
         User::create([
-            'name' => $validated['name'],
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => 'user',
             'is_active' => $request->has('is_active') ? true : false,
+            'status' => 'approved',
         ]);
 
         return redirect()->route('admin.users')->with('success', 'User account created successfully.');
@@ -128,14 +131,16 @@ class AdminWebController extends Controller
         $user = User::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
+            'first_name' => 'required|string|max:100',
+            'last_name' => 'required|string|max:100',
             'email' => 'required|email|unique:users,email,' . $id,
             'password' => 'nullable|string|min:6',
             'is_active' => 'nullable|boolean',
         ]);
 
         $updateData = [
-            'name' => $validated['name'],
+            'first_name' => $validated['first_name'],
+            'last_name' => $validated['last_name'],
             'email' => $validated['email'],
             'is_active' => $request->has('is_active') ? true : false,
         ];
@@ -161,8 +166,8 @@ class AdminWebController extends Controller
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%")
-                  ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('last_name', 'like', "%{$search}%")
+                    ->orWhere('email', 'like', "%{$search}%");
             });
         }
 
@@ -252,9 +257,9 @@ class AdminWebController extends Controller
     public function settingsUpdate(Request $request)
     {
         $request->validate([
-            'quick_prompts'   => 'nullable|array',
+            'quick_prompts' => 'nullable|array',
             'quick_prompts.*' => 'nullable|string',
-            'speaker_labels'  => 'nullable|string',
+            'speaker_labels' => 'nullable|string',
         ]);
 
         $labelsStr = $request->input('speaker_labels', '');
@@ -303,8 +308,8 @@ class AdminWebController extends Controller
     public function apiKeyStore(Request $request)
     {
         $validated = $request->validate([
-            'key'           => 'required|string',
-            'subscription'  => 'required|in:Free,Paid',
+            'key' => 'required|string',
+            'subscription' => 'required|in:Free,Paid',
             'quota_renewal' => 'required|date',
         ]);
 
@@ -318,8 +323,8 @@ class AdminWebController extends Controller
         $apiKey = ApiKey::findOrFail($id);
 
         $validated = $request->validate([
-            'key'           => 'required|string',
-            'subscription'  => 'required|in:Free,Paid',
+            'key' => 'required|string',
+            'subscription' => 'required|in:Free,Paid',
             'quota_renewal' => 'required|date',
         ]);
 
