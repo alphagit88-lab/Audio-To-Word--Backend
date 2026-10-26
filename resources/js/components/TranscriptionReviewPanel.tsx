@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TranscriptionPart } from '../types';
-import { resubmitWithGemini, saveProjectToApi } from '../services/ConversionService';
+import { isTranscriptionErrorText, resubmitWithGemini, saveProjectToApi } from '../services/ConversionService';
 import {
   X, RotateCcw, CheckCircle, Clock, FileText,
   Loader2, ChevronRight, Download, AlertCircle,
@@ -630,19 +630,23 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
       flexDirection: 'column' as const,
       gap: '0.25rem',
     },
-    partBtn: (isActive: boolean, isDone: boolean, isResubmitted: boolean) => ({
+    partBtn: (isActive: boolean, isDone: boolean, isResubmitted: boolean, isError: boolean) => ({
       display: 'flex',
       alignItems: 'center',
       gap: '0.6rem',
       padding: '0.65rem 0.75rem',
       borderRadius: '8px',
-      border: isActive ? (isResubmitted ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(99,102,241,0.4)') : '1px solid transparent',
+      border: isError
+        ? '1px solid rgba(239,68,68,0.45)'
+        : isActive ? (isResubmitted ? '1px solid rgba(245,158,11,0.5)' : '1px solid rgba(99,102,241,0.4)') : '1px solid transparent',
       background: isActive
-        ? (isResubmitted
+        ? (isError
+          ? 'linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.06) 100%)'
+          : isResubmitted
           ? 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%)'
           : 'linear-gradient(135deg, rgba(99,102,241,0.2) 0%, rgba(139,92,246,0.12) 100%)')
-        : 'none',
-      color: isActive ? (isResubmitted ? '#fbbf24' : '#e2e8f0') : isDone ? (isResubmitted ? '#fcd34d' : '#94a3b8') : '#475569',
+        : isError ? 'rgba(239,68,68,0.08)' : 'none',
+      color: isError ? '#fca5a5' : isActive ? (isResubmitted ? '#fbbf24' : '#e2e8f0') : isDone ? (isResubmitted ? '#fcd34d' : '#94a3b8') : '#475569',
       fontSize: '0.82rem',
       fontWeight: isActive ? 600 : 500,
       cursor: isDone ? 'pointer' : 'default',
@@ -707,8 +711,8 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
     if (st === 'pending') return <Clock size={13} color="#475569" />;
 
     const part = parts.find((p) => p.chunkIndex === idx);
-    if (part && part.text.includes('**Process aborted for this part due to recitation or safety reasons**')) {
-      return <span title="Safety block detected"><AlertTriangle size={13} color="#ef4444" /></span>;
+    if (part && isTranscriptionErrorText(part.text)) {
+      return <span title="Transcription error"><AlertTriangle size={13} color="#ef4444" /></span>;
     }
 
     if (st === 'resubmitted') return <RotateCcw size={13} color="#f59e0b" />;
@@ -826,10 +830,11 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
               const isDone = !!parts.find((p) => p.chunkIndex === i);
               const isActive = selectedIndex === i;
               const isResubmitted = resubmittedSet.has(i);
+              const isError = parts.some((p) => p.chunkIndex === i && isTranscriptionErrorText(p.text));
               return (
                 <button
                   key={i}
-                  style={s.partBtn(isActive, isDone, isResubmitted)}
+                  style={s.partBtn(isActive, isDone, isResubmitted, isError)}
                   onClick={() => isDone && setSelectedIndex(i)}
                 >
                   <StatusIcon idx={i} />
@@ -1211,4 +1216,3 @@ export const TranscriptionReviewPanel: React.FC<Props> = ({
     </div>
   );
 };
-

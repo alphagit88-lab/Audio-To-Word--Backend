@@ -13,7 +13,7 @@ import { LogOut, FileAudio, Users, Clock, FolderKanban } from 'lucide-react';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
 import { PartialConversionDialog } from './components/PartialConversionDialog';
 import { CancelConfirmationDialog } from './components/CancelConfirmationDialog';
-import { conversionService } from './services/ConversionService';
+import { conversionService, SKIPPED_ERROR_TEXT } from './services/ConversionService';
 
 interface UsageStats {
   total_seconds: number;
@@ -385,6 +385,37 @@ const MainAppContent: React.FC = () => {
     }
   };
 
+  const handleSkipConversion = () => {
+    if (!resumeState) return;
+
+    const skippedChunkIndex = resumeState.startFromChunkIndex;
+    const skippedText = `\n\n${SKIPPED_ERROR_TEXT}\n\n`;
+    const nextResumeState: ConversionResumeState = {
+      ...resumeState,
+      startFromChunkIndex: skippedChunkIndex + 1,
+      existingTranscription: resumeState.existingTranscription
+        + (resumeState.existingTranscription ? '\n\n' : '')
+        + skippedText.trim(),
+    };
+
+    setTranscriptionParts((prev) => {
+      const skippedPart: TranscriptionPart = {
+        chunkIndex: skippedChunkIndex,
+        text: skippedText,
+        audioChunkPaths: [],
+        total: conversionResult?.totalChunks ?? totalExpectedChunks,
+        primaryAudioFilePath: resumeState.files[0]?.filePath ?? '',
+      };
+      const existing = prev.findIndex((part) => part.chunkIndex === skippedChunkIndex);
+      if (existing < 0) return [...prev, skippedPart].sort((a, b) => a.chunkIndex - b.chunkIndex);
+      const updated = [...prev];
+      updated[existing] = skippedPart;
+      return updated;
+    });
+    setShowReviewPanel(true);
+    runConversion(nextResumeState);
+  };
+
   const handleRestartConversion = () => {
     setResumeState(null);
     setShowPartialDialog(false);
@@ -499,6 +530,7 @@ const MainAppContent: React.FC = () => {
           docxPath={conversionResult.docxPath}
           errorMessage={conversionResult.error}
           onResume={handleResumeConversion}
+          onSkip={handleSkipConversion}
           onRestart={handleRestartConversion}
         />
       )}

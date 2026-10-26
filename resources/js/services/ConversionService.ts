@@ -11,6 +11,12 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } fro
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 
+export const RECITATION_ERROR_TEXT = '**Process aborted for this part due to recitation or safety reasons**';
+export const SKIPPED_ERROR_TEXT = '**Process skipped for this part due to a transcription error**';
+
+export const isTranscriptionErrorText = (text: string): boolean =>
+  text.includes(RECITATION_ERROR_TEXT) || text.includes(SKIPPED_ERROR_TEXT);
+
 // ── Utility helpers ────────────────────────────────────────────────────────────
 
 function timeToSeconds(timeStr?: string): number {
@@ -190,7 +196,7 @@ async function transcribeAudioBatch(
   if (!transcription) {
     const reason = response.candidates?.[0]?.finishReason;
     if (reason === 'RECITATION' || reason === 'SAFETY') {
-      return '\n\n**Process aborted for this part due to recitation or safety reasons**\n\n';
+      return `\n\n${RECITATION_ERROR_TEXT}\n\n`;
     }
     throw new Error('Received empty transcription.');
   }
@@ -585,4 +591,3 @@ export async function saveProjectToApi(
   const data = await res.json();
   return { id: data.id, name: data.name };
 }
-

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Play, RotateCcw } from 'lucide-react';
+import { AlertTriangle, Play, RotateCcw, SkipForward } from 'lucide-react';
 import { useTranslation } from '../context/LanguageContext';
 
 interface PartialConversionDialogProps {
@@ -8,6 +8,7 @@ interface PartialConversionDialogProps {
   docxPath?: string;
   errorMessage?: string;
   onResume: () => void;
+  onSkip: () => void;
   onRestart: () => void;
 }
 
@@ -17,6 +18,7 @@ export const PartialConversionDialog: React.FC<PartialConversionDialogProps> = (
   docxPath,
   errorMessage,
   onResume,
+  onSkip,
   onRestart
 }) => {
   const { t } = useTranslation();
@@ -56,7 +58,7 @@ export const PartialConversionDialog: React.FC<PartialConversionDialogProps> = (
             </p>
             {errorMessage && (
               <p style={{ fontSize: '0.8rem', color: '#f87171', marginTop: '0.5rem', background: 'rgba(239,68,68,0.1)', padding: '0.5rem 0.75rem', borderRadius: '6px', wordBreak: 'break-word' }}>
-                ⚠ {errorMessage}
+                ⚠ {t('partial.error_try_again')}
               </p>
             )}
             {docxPath && (
@@ -87,6 +89,27 @@ export const PartialConversionDialog: React.FC<PartialConversionDialogProps> = (
           >
             <Play size={16} />
             {t('partial.btn_resume')}
+          </button>
+
+          <button
+            onClick={onSkip}
+            style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#fca5a5',
+              padding: '0.75rem 1rem',
+              borderRadius: '10px',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}
+          >
+            <SkipForward size={16} />
+            {t('partial.btn_skip')}
           </button>
 
           <button
